@@ -1,0 +1,49 @@
+name: Deploy
+on:
+  push:
+    branches: [main]
+
+jobs:
+  guard:
+    name: Pricing Safety Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/assertPricingSafety.js
+
+  functions:
+    name: Build & Test Cloud Functions
+    needs: guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci --prefix functions
+      - run: npm test --prefix functions
+      - run: npm run build --prefix functions
+      - name: Deploy Functions
+        if: github.ref == 'refs/heads/main'
+        uses: w9jds/firebase-action@master
+        with:
+          args: deploy --only functions
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+
+  rules:
+    name: Deploy Security Rules & Indexes
+    needs: guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy Rules
+        if: github.ref == 'refs/heads/main'
+        uses: w9jds/firebase-action@master
+        with:
+          args: deploy --only firestore:rules,firestore:indexes,storage
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}

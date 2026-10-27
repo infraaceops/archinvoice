@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+    function memberOf(t) {
+      return signedIn() &&
+        exists(/databases/$(db)/documents/tenants/$(t)/members/$(uid()));
+    }
+    function roleOf(t) {
+      return get(/databases/$(db)/documents/tenants/$(t)/members/$(uid())).data.role;
+    }
+    function isAdmin(t) { return memberOf(t) && roleOf(t) == 'admin'; }
+    function canWriteInvoices(t) {
+      return memberOf(t) && roleOf(t) in ['admin','architect'];
+    }
+
+    match /users/{userId} {
+      allow read, write: if signedIn() && uid() == userId;
+    }
+
+    match /tenants/{t} {
+      allow read: if memberOf(t);
+      allow create: if signedIn();
+      allow update: if isAdmin(t) &&
+        !request.resource.data.diff(resource.data)
+          .affectedKeys().hasAny(['subscription','storage']);
+      allow delete: if false;
+    }
+
+    match /tenants/{t}/members/{m} {
+      allow read: if memberOf(t);
+      allow write: if isAdmin(t);
+    }
+
+    match /tenants/{t}/invites/{code} {
+      allow read: if isAdmin(t);
+      allow create: if isAdmin(t);
+      allow update: if signedIn() && request.resource.data.used == true;
+    }
+
+    match /tenants/{t}/projects/{p} {
+      allow read: if memberOf(t);
+      allow create, update: if canWriteInvoices(t);
+      allow delete: if isAdmin(t);
+    }
+
+    match /tenants/{t}/counters/{c} {
+      allow read: if memberOf(t);
+      allow write: if false;   // Functions only
+    }
+
+    match /tenants/{t}/invoices/{i} {
+      allow read: if memberOf(t);
+      allow create: if canWriteInvoices(t) &&
+        request.resource.data.status == 'draft' &&
+        request.resource.data.serial == null;
+      allow update: if canWriteInvoices(t) &&
+        resource.data.status in ['draft','issued'];
+      allow delete: if false;
+    }
+
+    match /tenants/{t}/storage_ledger/{d} {
+      allow read: if isAdmin(t);
+      allow write: if false;
+    }
+
+    match /tenants/{t}/billing/{m} {
+      allow read: if isAdmin(t);
+      allow write: if false;
+    }
+  }
+}

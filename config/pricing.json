@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "currency_internal": "USD",
+  "fx_usd_to_pkr": 280,
+  "base": {
+    "pricePkr": 280,
+    "includedStorageGb": 1,
+    "includedEgressGb": 3
+  },
+  "storage": {
+    "pricePkrPerGbMonth": 100,
+    "packSizeGb": 1
+  },
+  "egress": {
+    "pricePkrPerGb": 40,
+    "hardCapGbPerMonth": 10,
+    "throttleAfterCap": true
+  },
+  "costBasisUsd": {
+    "storagePerGb": 0.026,
+    "egressPerGb": 0.08,
+    "functionPerMillion": 0.40,
+    "firestoreReadPer100k": 0.06,
+    "firestoreWritePer100k": 0.18
+  },
+  "guardrails": {
+    "minStorageMarginPct": 40,
+    "minEgressMarginPct": 40,
+    "playFeePct": 15,
+    "firebaseBudgetAlertPkr": [10000, 20000, 35000],
+    "autoThrottleOnNegativeMarginDays": 2
+  }
+}

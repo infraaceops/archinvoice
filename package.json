@@ -1,0 +1,37 @@
+{
+  "name": "arch-invoice-app",
+  "version": "1.0.0",
+  "description": "Multi-Tenant Architecture & Interior Invoice Generator - Portable Native App for Web, Android, iOS",
+  "main": "index.js",
+  "scripts": {
+    "start": "expo start",
+    "web": "expo start --web",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "build:web": "expo export -p web",
+    "functions:build": "npm --prefix functions run build",
+    "functions:test": "npm --prefix functions test",
+    "guard": "node scripts/assertPricingSafety.js",
+    "test": "npm run functions:test"
+  },
+  "dependencies": {
+    "@expo/vector-icons": "^14.0.0",
+    "expo": "~52.0.0",
+    "expo-constants": "~17.0.0",
+    "expo-image-picker": "~16.0.0",
+    "expo-print": "~14.0.0",
+    "expo-sharing": "~13.0.0",
+    "expo-status-bar": "~2.0.0",
+    "firebase": "^10.8.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-native": "0.76.5",
+    "react-native-web": "~0.19.13"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.20.0",
+    "@types/react": "~18.3.12",
+    "typescript": "^5.3.3"
+  },
+  "private": true
+}
