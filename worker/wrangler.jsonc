@@ -17,7 +17,7 @@
     {
       "binding": "DB",
       "database_name": "archinvoice",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "database_id": "36e4fddf-b68d-41ff-8a27-dea8c6a6b57f",
       "migrations_dir": "migrations"
     }
   ]
