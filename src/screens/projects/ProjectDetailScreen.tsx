@@ -8,9 +8,11 @@ import { Button } from '../../components/Button';
 import { formatPKR } from '../../util/currency';
 import { formatDate } from '../../util/dates';
 import { ProjectDoc } from '../../types';
+import { useAuth } from '../../context/AuthContext';
 
 export const ProjectDetailScreen: React.FC = () => {
   const { currentParams, invoices, navigateTo } = useTenant();
+  const { role } = useAuth();
   const project: ProjectDoc = currentParams?.project;
 
   if (!project) {
@@ -35,13 +37,13 @@ export const ProjectDetailScreen: React.FC = () => {
         subtitle={`${project.type.toUpperCase()} • ${project.area.toLocaleString()} ${project.unit}`}
         showBack
         onBack={() => navigateTo('projects')}
-        rightAction={
+        rightAction={role !== 'client' ? (
           <Button
             title="+ Bill Project"
             onPress={() => navigateTo('create_invoice', { selectedProject: project })}
             size="sm"
           />
-        }
+        ) : undefined}
       />
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -61,8 +63,21 @@ export const ProjectDetailScreen: React.FC = () => {
             </View>
           </View>
 
+          <View style={styles.workspaceBox}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.boxTitle}>Project collaboration</Text>
+              <Text style={styles.workspaceId}>Project ID: {project.id}</Text>
+              <Text style={styles.mutedText}>Drawings, progress, comments and approvals</Text>
+            </View>
+            <Button
+              title="Open workspace"
+              onPress={() => navigateTo('collaboration', { project })}
+              size="sm"
+            />
+          </View>
+
           {/* Rate Cards Box */}
-          <View style={styles.rateCardBox}>
+          {role !== 'client' && <View style={styles.rateCardBox}>
             <Text style={styles.boxTitle}>Configured Rate Card (PKR / {project.unit})</Text>
             <View style={styles.ratesGrid}>
               <View style={styles.rateCardItem}>
@@ -78,18 +93,18 @@ export const ProjectDetailScreen: React.FC = () => {
                 <Text style={styles.rateValue}>PKR {project.rateCard?.supervision || 0}</Text>
               </View>
             </View>
-          </View>
+          </View>}
 
-          <View style={styles.architectsRow}>
+          {role !== 'client' && <View style={styles.architectsRow}>
             <Text style={styles.architectsLabel}>Assigned Architects:</Text>
             <Text style={styles.architectsVal}>
               {project.assignedArchitects?.join(', ') || 'None'}
             </Text>
-          </View>
+          </View>}
         </Card>
 
         {/* Project Invoices Section */}
-        <Card>
+        {role !== 'client' && <Card>
           <View style={styles.invHeaderRow}>
             <View>
               <Text style={styles.sectionTitle}>Commission Invoices ({projectInvoices.length})</Text>
@@ -131,7 +146,7 @@ export const ProjectDetailScreen: React.FC = () => {
               <Text style={styles.emptyInvoicesText}>No invoices issued for this project yet.</Text>
             </View>
           )}
-        </Card>
+        </Card>}
       </ScrollView>
     </View>
   );
@@ -183,6 +198,19 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
     marginBottom: 16,
   },
+  workspaceBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#eff6ff',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  workspaceId: { fontSize: 12, color: '#1e3a8a', fontWeight: '700', marginTop: 2 },
+  mutedText: { fontSize: 11, color: '#64748b', marginTop: 4 },
   boxTitle: {
     fontSize: 11,
     fontWeight: '700',

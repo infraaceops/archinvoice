@@ -1,18 +1,27 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useTenant, ScreenName } from '../context/TenantContext';
+import { useAuth } from '../context/AuthContext';
 
 export const TabBar: React.FC = () => {
   const { activeScreen, navigateTo } = useTenant();
+  const { role } = useAuth();
 
-  const tabs: Array<{ screen: ScreenName; label: string; icon: string }> = [
+  const clientTabs: Array<{ screen: ScreenName; label: string; icon: string }> = [
+    { screen: 'projects', label: 'Projects', icon: '📐' },
+    { screen: 'notifications', label: 'Updates', icon: '🔔' },
+    { screen: 'profile', label: 'Profile', icon: '👤' },
+  ];
+  const firmTabs: Array<{ screen: ScreenName; label: string; icon: string }> = [
     { screen: 'dashboard', label: 'Home', icon: '📊' },
     { screen: 'projects', label: 'Projects', icon: '📐' },
+    { screen: 'notifications', label: 'Updates', icon: '🔔' },
     { screen: 'create_invoice', label: 'New Invoice', icon: '⚡' },
     { screen: 'history', label: 'Invoices', icon: '📜' },
     { screen: 'billing', label: 'Billing', icon: '💳' },
     { screen: 'settings', label: 'Settings', icon: '⚙️' },
   ];
+  const tabs = role === 'client' ? clientTabs : firmTabs;
 
   return (
     <View style={styles.container}>

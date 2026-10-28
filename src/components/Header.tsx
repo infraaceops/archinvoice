@@ -19,15 +19,8 @@ export const Header: React.FC<HeaderProps> = ({
   onBack,
   rightAction,
 }) => {
-  const { user, role, switchRole } = useAuth();
+  const { user, role } = useAuth();
   const { navigateTo } = useTenant();
-
-  const handleRoleToggle = () => {
-    // Quick role toggle for testing permissions: Admin -> Architect -> Viewer -> Admin
-    if (role === 'admin') switchRole('architect');
-    else if (role === 'architect') switchRole('viewer');
-    else switchRole('admin');
-  };
 
   return (
     <View style={styles.header}>
@@ -48,12 +41,8 @@ export const Header: React.FC<HeaderProps> = ({
 
       <View style={styles.right}>
         {rightAction}
-        {user && (
-          <TouchableOpacity
-            style={styles.rolePill}
-            onPress={handleRoleToggle}
-            activeOpacity={0.7}
-          >
+        {user && role && (
+          <View style={styles.rolePill}>
             <View
               style={[
                 styles.roleDot,
@@ -68,7 +57,7 @@ export const Header: React.FC<HeaderProps> = ({
               ]}
             />
             <Text style={styles.roleText}>{role?.toUpperCase()}</Text>
-          </TouchableOpacity>
+          </View>
         )}
       </View>
     </View>

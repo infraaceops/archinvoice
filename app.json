@@ -4,6 +4,7 @@
     "slug": "arch-invoice-app",
     "version": "1.0.0",
     "orientation": "portrait",
+    "scheme": "archinvoice",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {

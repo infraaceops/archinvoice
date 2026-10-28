@@ -8,7 +8,13 @@ assertPricingSafety();
 initializeApp();
 
 // Export all Cloud Functions
-export { createTenant, joinTenant } from './auth/tenant';
+export {
+  createTenant,
+  joinTenant,
+  createTeamInvitation,
+  listTenantTeam,
+  removeTeamMember,
+} from './auth/tenant';
 export { allocateSerialAndCreateInvoice } from './counters/serial';
 export { issueInvoiceAndGeneratePdf, getSignedPdfUrl } from './invoices/issue';
 export { playRTDNWebhook, verifyPurchase } from './billing/play';

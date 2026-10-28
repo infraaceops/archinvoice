@@ -5,7 +5,7 @@ import * as crypto from 'crypto';
 import puppeteer from 'puppeteer';
 import { renderInvoiceHtml } from '../pdf/template';
 import { TenantDoc, InvoiceDoc, ProjectDoc } from '../types';
-import pricing from '../../../../config/pricing.json';
+import pricing from '../../../config/pricing.json';
 
 export const issueInvoiceAndGeneratePdf = onCall(async (req) => {
   const uid = req.auth?.uid;

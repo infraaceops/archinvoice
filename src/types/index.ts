@@ -1,4 +1,5 @@
-export type Role = 'admin' | 'architect' | 'viewer';
+export type Role = 'admin' | 'architect' | 'viewer' | 'client';
+export type CompanyRole = Exclude<Role, 'client'>;
 export type Category = 'architecture' | 'interior' | 'supervision';
 export type ProjectType = 'residential' | 'commercial';
 export type InvoiceStatus = 'draft' | 'issued' | 'paid' | 'cancelled';
@@ -55,18 +56,28 @@ export interface MemberDoc {
   uid: string;
   displayName?: string;
   email?: string;
-  role: Role;
+  phone?: string;
+  role: CompanyRole;
   invitedBy: string;
   joinedAt: string;
+  status?: 'active' | 'invited';
 }
 
 export interface InviteDoc {
-  code: string;
-  email?: string;
-  role: Role;
+  id: string;
+  tenantId: string;
+  email: string;
+  phone?: string;
+  role: Exclude<CompanyRole, 'admin'>;
   createdBy: string;
   expiresAt: string;
   used: boolean;
+}
+
+export interface TeamInvitationResult {
+  inviteToken: string;
+  inviteLink: string;
+  expiresAt: string;
 }
 
 export interface ProjectDoc {
@@ -136,4 +147,100 @@ export interface BillingMonthDoc {
   revenuePkr: number;
   marginPkr: number;
   throttled: boolean;
+}
+
+export type RevisionStatus =
+  | 'pending_review'
+  | 'under_review'
+  | 'objection_raised'
+  | 'rectification_in_progress'
+  | 'rectified'
+  | 'approved'
+  | 'auto_escalated';
+
+export type CommentType = 'question' | 'objection' | 'approval_note' | 'reply';
+
+export interface ProjectClientDoc {
+  id: string;
+  projectId: string;
+  name: string;
+  email: string;
+  phone?: string;
+  inviteStatus: 'invited' | 'accepted' | 'revoked';
+  invitedBy: string;
+  invitedAt: string;
+  acceptedAt?: string;
+}
+
+export interface DrawingFile {
+  name: string;
+  uri: string;
+  sizeBytes: number;
+  mimeType: string;
+}
+
+export interface DrawingRevision {
+  id: string;
+  drawingId: string;
+  revisionNumber: number;
+  files: DrawingFile[];
+  status: RevisionStatus;
+  uploadedBy: string;
+  uploadedAt: string;
+  firstOpenedByClientAt?: string;
+  approvedAt?: string;
+  approvedBy?: string;
+}
+
+export interface DrawingDoc {
+  id: string;
+  projectId: string;
+  title: string;
+  category: 'architecture' | 'interior' | 'supervision' | 'structural' | 'mep' | 'other';
+  description?: string;
+  currentRevisionId: string;
+  currentRevisionNumber: number;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DrawingComment {
+  id: string;
+  drawingId: string;
+  revisionId: string;
+  authorUid: string;
+  authorName: string;
+  authorEmail: string;
+  authorRole: 'client' | 'architect' | 'admin';
+  type: CommentType;
+  body: string;
+  status: 'open' | 'resolved' | 'wont_fix';
+  parentCommentId?: string;
+  createdAt: string;
+}
+
+export interface RevisionEvent {
+  id: string;
+  revisionId: string;
+  fromStatus: RevisionStatus | null;
+  toStatus: RevisionStatus;
+  actorUid: string;
+  actorRole: Role;
+  note?: string;
+  at: string;
+}
+
+export interface CollaborationNotification {
+  id: string;
+  recipientEmail: string;
+  type: 'drawing_uploaded' | 'comment_added' | 'approved' | 'invite';
+  projectId: string;
+  drawingId?: string;
+  revisionId?: string;
+  title: string;
+  body: string;
+  deepLink: string;
+  read: boolean;
+  createdAt: string;
 }

@@ -1,49 +1,66 @@
-name: Deploy
+name: Validate and deploy ArchInvoice web
+
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
 
 jobs:
-  guard:
-    name: Pricing Safety Guard
+  validate:
+    name: Validate app and Cloudflare API
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: node scripts/assertPricingSafety.js
-
-  functions:
-    name: Build & Test Cloud Functions
-    needs: guard
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run guard
+      - run: npm run build:web
+        env:
+          EXPO_PUBLIC_AUTH_PROVIDER: cloudflare
+          EXPO_PUBLIC_API_BASE_URL: https://api.archinvoice.infraaceops.com
+          EXPO_PUBLIC_APP_DOMAIN: archinvoice.infraaceops.com
+      - run: npm ci --prefix worker
+      - run: npm run typecheck --prefix worker
       - run: npm ci --prefix functions
       - run: npm test --prefix functions
       - run: npm run build --prefix functions
-      - name: Deploy Functions
-        if: github.ref == 'refs/heads/main'
-        uses: w9jds/firebase-action@master
-        with:
-          args: deploy --only functions
-        env:
-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
 
-  rules:
-    name: Deploy Security Rules & Indexes
-    needs: guard
+  deploy-pages:
+    name: Deploy GitHub Pages site
+    needs: validate
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: Deploy Rules
-        if: github.ref == 'refs/heads/main'
-        uses: w9jds/firebase-action@master
+      - uses: actions/setup-node@v4
         with:
-          args: deploy --only firestore:rules,firestore:indexes,storage
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build:web
         env:
-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          EXPO_PUBLIC_AUTH_PROVIDER: cloudflare
+          EXPO_PUBLIC_API_BASE_URL: https://api.archinvoice.infraaceops.com
+          EXPO_PUBLIC_APP_DOMAIN: archinvoice.infraaceops.com
+      - name: Set custom domain
+        run: echo "archinvoice.infraaceops.com" > dist/CNAME
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v4

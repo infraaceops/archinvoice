@@ -1,149 +1,127 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useAuth } from '../../context/AuthContext';
 import { useTenant } from '../../context/TenantContext';
 import { api } from '../../services/api';
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
 import { useToast } from '../../context/ToastContext';
 
-export const JoinCompanyScreen: React.FC = () => {
-  const { navigateTo, refreshData } = useTenant();
-  const { showToast } = useToast();
+function invitationFromValue(value: string): { tenantId: string; token: string } {
+  try {
+    const url = new URL(value);
+    const token = url.searchParams.get('token');
+    const tenantId = url.searchParams.get('tenantId');
+    if (token && tenantId) return { tenantId, token };
+  } catch {
+    // The value may be the raw token.
+  }
+  return { tenantId: '', token: value.trim() };
+}
 
-  const [inviteCode, setInviteCode] = useState('ARC-7492');
+export const JoinCompanyScreen: React.FC = () => {
+  const { currentParams, navigateTo } = useTenant();
+  const { user, refreshUser, signOut } = useAuth();
+  const { showToast } = useToast();
+  const [inviteToken, setInviteToken] = useState(currentParams?.inviteToken || '');
+  const [tenantId, setTenantId] = useState(currentParams?.tenantId || '');
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    if (typeof currentParams?.inviteToken === 'string') setInviteToken(currentParams.inviteToken);
+    if (typeof currentParams?.tenantId === 'string') setTenantId(currentParams.tenantId);
+  }, [currentParams?.inviteToken, currentParams?.tenantId]);
+
   const handleJoin = async () => {
-    if (!inviteCode.trim()) {
-      showToast('Please enter an invite code.', { type: 'error' });
+    const parsedInvite = invitationFromValue(inviteToken);
+    const token = parsedInvite.token;
+    const inviteTenantId = parsedInvite.tenantId || tenantId.trim();
+    if (!user) {
+      showToast('Sign in with the Google email this invitation was sent to.', { type: 'error' });
+      navigateTo('signin', { inviteToken: token, tenantId: inviteTenantId });
       return;
     }
-
+    if (!token || !inviteTenantId) {
+      showToast('Open the secure invitation link or enter both its token and company ID.', { type: 'error' });
+      return;
+    }
     setLoading(true);
     try {
-      const res = await api.joinTenant(inviteCode);
-      refreshData();
-      showToast(`Joined firm successfully as ${res.role.toUpperCase()}!`, { type: 'success' });
+      await api.joinTenant(inviteTenantId, token);
+      await refreshUser();
+      showToast('You joined the company team.', { type: 'success' });
       navigateTo('dashboard');
-    } catch (e: any) {
-      showToast(e.message || 'Invalid or expired invite code', { type: 'error' });
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Invitation could not be accepted.', { type: 'error' });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
+    <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.card}>
-        <Text style={styles.title}>Join Architectural Firm</Text>
+        <Text style={styles.title}>Accept a team invitation</Text>
         <Text style={styles.subtitle}>
-          Enter the invite code issued by your firm administrator.
+          Invitations are checked securely by the configured backend and can only be accepted using the invited Google email.
         </Text>
-
+        {user ? (
+          <Text style={styles.account}>Signed in as {user.email}</Text>
+        ) : (
+          <Button
+            title="Sign in with Google first"
+            onPress={() => navigateTo('signin', { inviteToken: inviteToken.trim(), tenantId: tenantId.trim() })}
+            variant="outline"
+            size="lg"
+            style={styles.signInButton}
+          />
+        )}
         <Input
-          label="6-Digit Invite Code"
-          value={inviteCode}
-          onChangeText={setInviteCode}
-          placeholder="e.g. ARC-7492"
-          autoCapitalize="characters"
-          style={styles.codeInput}
+          label="Invitation link or token"
+          value={inviteToken}
+          onChangeText={setInviteToken}
+          placeholder="Paste the invitation link"
+          autoCapitalize="none"
+          multiline
         />
-
-        <View style={styles.hintBox}>
-          <Text style={styles.hintTitle}>Demo Codes to Test:</Text>
-          <Text style={styles.hintItem}>• <Text style={styles.bold}>ARC-7492</Text> - Join as Architect</Text>
-          <Text style={styles.hintItem}>• <Text style={styles.bold}>ADM-9182</Text> - Join as Admin</Text>
-        </View>
-
+        {!invitationFromValue(inviteToken).tenantId && (
+          <Input
+            label="Company ID"
+            value={tenantId}
+            onChangeText={setTenantId}
+            placeholder="Company ID from the invitation"
+            autoCapitalize="none"
+          />
+        )}
         <Button
-          title="Verify & Join Firm"
-          onPress={handleJoin}
+          title="Accept invitation"
+          onPress={() => void handleJoin()}
           loading={loading}
+          disabled={!inviteToken.trim() || !tenantId.trim() && !invitationFromValue(inviteToken).tenantId}
           size="lg"
-          style={styles.joinBtn}
+          style={styles.joinButton}
         />
-
-        <TouchableOpacity
-          style={styles.backLink}
-          onPress={() => navigateTo('onboarding')}
-        >
-          <Text style={styles.backLinkText}>‹ Cancel & Go Back</Text>
+        <TouchableOpacity style={styles.link} onPress={() => navigateTo(user ? 'create_company' : 'signin')}>
+          <Text style={styles.linkText}>{user ? '‹ Back to company setup' : '‹ Back to sign in'}</Text>
         </TouchableOpacity>
+        {user && (
+          <TouchableOpacity style={styles.link} onPress={() => void signOut()}>
+            <Text style={styles.linkText}>Sign out of this account</Text>
+          </TouchableOpacity>
+        )}
       </View>
-    </View>
+    </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0f172a',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 28,
-    width: '100%',
-    maxWidth: 440,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#0f172a',
-  },
-  subtitle: {
-    fontSize: 13,
-    color: '#64748b',
-    marginTop: 4,
-    marginBottom: 20,
-  },
-  codeInput: {
-    textAlign: 'center',
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: 2,
-  },
-  hintBox: {
-    backgroundColor: '#f8fafc',
-    borderRadius: 8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    marginBottom: 20,
-  },
-  hintTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#64748b',
-    textTransform: 'uppercase',
-    marginBottom: 4,
-  },
-  hintItem: {
-    fontSize: 12,
-    color: '#334155',
-    marginVertical: 2,
-  },
-  bold: {
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  joinBtn: {
-    marginTop: 4,
-  },
-  backLink: {
-    marginTop: 16,
-    alignItems: 'center',
-  },
-  backLinkText: {
-    fontSize: 13,
-    color: '#64748b',
-    fontWeight: '600',
-  },
+  container: { flexGrow: 1, backgroundColor: '#0f172a', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  card: { backgroundColor: '#ffffff', borderRadius: 16, padding: 28, width: '100%', maxWidth: 480 },
+  title: { color: '#0f172a', fontSize: 22, fontWeight: '800' },
+  subtitle: { color: '#64748b', fontSize: 13, lineHeight: 19, marginTop: 6, marginBottom: 18 },
+  account: { color: '#1d4ed8', fontWeight: '700', fontSize: 12, marginBottom: 14 },
+  signInButton: { marginBottom: 18 },
+  joinButton: { marginTop: 4 },
+  link: { alignItems: 'center', marginTop: 16 },
+  linkText: { color: '#475569', fontWeight: '600', fontSize: 13 },
 });

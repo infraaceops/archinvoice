@@ -58,11 +58,15 @@ export interface MemberDoc {
 }
 
 export interface InviteDoc {
-  email?: string;
-  role: Role;
+  email: string;
+  phone: string;
+  role: Exclude<Role, 'admin'>;
   createdBy: string;
+  createdAt: Timestamp;
   expiresAt: Timestamp;
   used: boolean;
+  acceptedBy?: string;
+  acceptedAt?: Timestamp;
 }
 
 export interface ProjectDoc {

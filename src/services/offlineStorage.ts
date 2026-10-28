@@ -32,22 +32,23 @@ function getItem(key: string): string | null {
 }
 
 export const offlineStorage = {
-  loadUser(): UserDoc {
+  loadUser(): UserDoc | null {
     const raw = getItem(STORAGE_KEYS.USER);
-    if (!raw) {
+    if (raw === null) {
       setItem(STORAGE_KEYS.USER, JSON.stringify(MOCK_USER));
       return MOCK_USER;
     }
+    if (raw === '' || raw === 'null') return null;
     try {
       return JSON.parse(raw);
     } catch {
-      return MOCK_USER;
+      return null;
     }
   },
 
   saveUser(user: UserDoc | null): void {
     if (!user) {
-      setItem(STORAGE_KEYS.USER, '');
+      setItem(STORAGE_KEYS.USER, 'null');
       return;
     }
     setItem(STORAGE_KEYS.USER, JSON.stringify(user));

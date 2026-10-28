@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "archinvoice-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-28",
+  "vars": {
+    "APP_ORIGIN": "https://archinvoice.infraaceops.com",
+    "SESSION_COOKIE_NAME": "__Host-archinvoice_session"
+  },
+  "routes": [
+    {
+      "pattern": "api.archinvoice.infraaceops.com",
+      "custom_domain": true
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "archinvoice",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

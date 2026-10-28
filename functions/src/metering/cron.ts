@@ -1,7 +1,7 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { TenantDoc } from '../types';
-import pricing from '../../../../config/pricing.json';
+import pricing from '../../../config/pricing.json';
 
 export const dailyMeteringCron = onSchedule('every 24 hours', async () => {
   const db = getFirestore();

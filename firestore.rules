@@ -1,74 +1,279 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{db}/documents {
-
     function signedIn() { return request.auth != null; }
-    function uid() { return request.auth.uid; }
-    function memberOf(t) {
+    function verifiedEmail() {
       return signedIn() &&
-        exists(/databases/$(db)/documents/tenants/$(t)/members/$(uid()));
+        request.auth.token.email is string &&
+        request.auth.token.email_verified == true;
     }
-    function roleOf(t) {
-      return get(/databases/$(db)/documents/tenants/$(t)/members/$(uid())).data.role;
+    function uid() { return request.auth.uid; }
+    function userPath(userId) {
+      return /databases/$(db)/documents/users/$(userId);
     }
-    function isAdmin(t) { return memberOf(t) && roleOf(t) == 'admin'; }
-    function canWriteInvoices(t) {
-      return memberOf(t) && roleOf(t) in ['admin','architect'];
+    function tenantPath(tenantId) {
+      return /databases/$(db)/documents/tenants/$(tenantId);
+    }
+    function memberPath(tenantId, memberId) {
+      return /databases/$(db)/documents/tenants/$(tenantId)/members/$(memberId);
+    }
+    function invitePath(tenantId, inviteId) {
+      return /databases/$(db)/documents/tenants/$(tenantId)/invites/$(inviteId);
+    }
+    function memberOf(tenantId) {
+      return signedIn() && exists(memberPath(tenantId, uid()));
+    }
+    function roleOf(tenantId) {
+      return get(memberPath(tenantId, uid())).data.role;
+    }
+    function isAdmin(tenantId) {
+      return memberOf(tenantId) && roleOf(tenantId) == 'admin';
+    }
+    function canWriteInvoices(tenantId) {
+      return memberOf(tenantId) && roleOf(tenantId) in ['admin', 'architect'];
+    }
+    function validBrandingImage(image) {
+      return image == null ||
+        (image is string &&
+         image.size() <= 175000 &&
+         image.matches('^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$'));
+    }
+    function validInitialTenantBilling(tenant, tenantId) {
+      return tenant.subscription.keys().hasOnly([
+          'status', 'plan', 'pricePkr', 'currentPeriodEnd', 'purchaseToken', 'productId'
+        ]) &&
+        tenant.subscription.status == 'active' &&
+        tenant.subscription.plan == 'core_monthly' &&
+        tenant.subscription.pricePkr == 280 &&
+        tenant.subscription.currentPeriodEnd > request.time &&
+        tenant.subscription.currentPeriodEnd <= request.time + duration.value(14, 'd') &&
+        tenant.subscription.purchaseToken == 'trial_' + tenantId &&
+        tenant.subscription.productId == 'core_monthly' &&
+        tenant.storage.keys().hasOnly([
+          'includedGb', 'purchasedGb', 'usedBytes', 'egressMonthBytes',
+          'egressMonthKey', 'lastMeteredAt', 'throttled'
+        ]) &&
+        tenant.storage.includedGb == 1 &&
+        tenant.storage.purchasedGb == 0 &&
+        tenant.storage.usedBytes == 0 &&
+        tenant.storage.egressMonthBytes == 0 &&
+        tenant.storage.egressMonthKey is string &&
+        tenant.storage.lastMeteredAt == request.time &&
+        tenant.storage.throttled == false;
+    }
+    function validTenantCreate(tenantId) {
+      let tenant = request.resource.data;
+      let owner = getAfter(userPath(uid())).data;
+      let member = getAfter(memberPath(tenantId, uid())).data;
+      return verifiedEmail() &&
+        tenant.keys().hasAll([
+          'name', 'ceoName', 'logoUrl', 'sealUrl', 'address', 'ntn',
+          'currency', 'subscription', 'storage', 'settings', 'createdBy', 'createdAt'
+        ]) &&
+        tenant.keys().hasOnly([
+          'name', 'ceoName', 'logoUrl', 'sealUrl', 'address', 'ntn',
+          'currency', 'subscription', 'storage', 'settings', 'createdBy', 'createdAt'
+        ]) &&
+        tenant.name is string && tenant.name.size() > 0 && tenant.name.size() <= 120 &&
+        tenant.ceoName is string && tenant.ceoName.size() > 0 && tenant.ceoName.size() <= 120 &&
+        validBrandingImage(tenant.logoUrl) && validBrandingImage(tenant.sealUrl) &&
+        tenant.address is string && tenant.address.size() <= 300 &&
+        tenant.ntn is string && tenant.ntn.size() <= 40 &&
+        tenant.currency == 'PKR' &&
+        validInitialTenantBilling(tenant, tenantId) &&
+        tenant.settings.keys().hasOnly(['invoiceDefaults']) &&
+        tenant.settings.invoiceDefaults.keys().hasOnly(['prefix', 'startAt', 'financialYear']) &&
+        tenant.settings.invoiceDefaults.prefix.keys().hasOnly(['architecture', 'interior', 'supervision']) &&
+        tenant.settings.invoiceDefaults.startAt.keys().hasOnly(['architecture', 'interior', 'supervision']) &&
+        tenant.settings.invoiceDefaults.prefix.architecture == 'ARCH' &&
+        tenant.settings.invoiceDefaults.prefix.interior == 'INT' &&
+        tenant.settings.invoiceDefaults.prefix.supervision == 'SUP' &&
+        tenant.settings.invoiceDefaults.startAt.architecture == 1 &&
+        tenant.settings.invoiceDefaults.startAt.interior == 1 &&
+        tenant.settings.invoiceDefaults.startAt.supervision == 1 &&
+        tenant.settings.invoiceDefaults.financialYear is string &&
+        tenant.createdBy == uid() &&
+        tenant.createdAt == request.time &&
+        owner.tenantId == tenantId && owner.role == 'admin' &&
+        member.uid == uid() && member.role == 'admin' &&
+        member.invitedBy == 'self' &&
+        member.email == request.auth.token.email.lower() &&
+        member.joinedAt == request.time;
+    }
+    function validOwnerMemberCreate(tenantId, memberId) {
+      let member = request.resource.data;
+      let tenant = getAfter(tenantPath(tenantId)).data;
+      let owner = getAfter(userPath(uid())).data;
+      return verifiedEmail() && memberId == uid() &&
+        member.keys().hasOnly(['uid', 'displayName', 'email', 'phone', 'role', 'invitedBy', 'joinedAt']) &&
+        member.uid == uid() && member.role == 'admin' &&
+        member.invitedBy == 'self' && member.email == request.auth.token.email.lower() &&
+        member.joinedAt == request.time &&
+        tenant.createdBy == uid() && owner.tenantId == tenantId && owner.role == 'admin';
+    }
+    function validInviteMemberCreate(tenantId, memberId) {
+      let member = request.resource.data;
+      let invite = get(invitePath(tenantId, member.inviteId)).data;
+      let inviteAfter = getAfter(invitePath(tenantId, member.inviteId)).data;
+      let userAfter = getAfter(userPath(uid())).data;
+      return verifiedEmail() && memberId == uid() &&
+        member.keys().hasOnly([
+          'uid', 'displayName', 'email', 'phone', 'role', 'invitedBy', 'joinedAt', 'inviteId'
+        ]) &&
+        member.uid == uid() && member.role in ['architect', 'viewer'] &&
+        member.email == request.auth.token.email.lower() &&
+        member.joinedAt == request.time &&
+        invite.used == false && invite.expiresAt > request.time &&
+        invite.email == request.auth.token.email.lower() &&
+        invite.role == member.role && invite.createdBy == member.invitedBy &&
+        inviteAfter.used == true && inviteAfter.acceptedBy == uid() &&
+        userAfter.tenantId == tenantId && userAfter.role == member.role;
+    }
+    function validMemberProfileCreate(userId) {
+      let user = request.resource.data;
+      let member = getAfter(memberPath(user.tenantId, userId)).data;
+      return verifiedEmail() && userId == uid() &&
+        user.keys().hasOnly([
+          'uid', 'displayName', 'email', 'photoUrl', 'tenantId', 'role', 'createdAt', 'updatedAt'
+        ]) &&
+        user.uid == uid() && user.email == request.auth.token.email.lower() &&
+        user.createdAt == request.time &&
+        user.role in ['admin', 'architect', 'viewer'] &&
+        member.uid == uid() && member.email == user.email &&
+        member.role == user.role;
+    }
+    function validMemberProfileUpdate(userId) {
+      let next = request.resource.data;
+      return verifiedEmail() && userId == uid() && resource.data.tenantId == null &&
+        next.tenantId is string &&
+        next.keys().hasOnly([
+          'uid', 'displayName', 'email', 'photoUrl', 'tenantId', 'role', 'createdAt', 'updatedAt'
+        ]) &&
+        next.uid == uid() && next.email == request.auth.token.email.lower() &&
+        next.createdAt == request.time &&
+        next.role in ['admin', 'architect', 'viewer'] &&
+        getAfter(memberPath(next.tenantId, userId)).data.uid == uid() &&
+        getAfter(memberPath(next.tenantId, userId)).data.email == next.email &&
+        getAfter(memberPath(next.tenantId, userId)).data.role == next.role;
+    }
+    function adminRemovingMemberProfile(userId) {
+      let tenantId = resource.data.tenantId;
+      return signedIn() && userId != uid() && tenantId is string &&
+        isAdmin(tenantId) &&
+        resource.data.role in ['architect', 'viewer'] &&
+        request.resource.data.tenantId == null &&
+        request.resource.data.role == null &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['tenantId', 'role', 'updatedAt']) &&
+        !existsAfter(memberPath(tenantId, userId));
     }
 
     match /users/{userId} {
-      allow read, write: if signedIn() && uid() == userId;
-    }
-
-    match /tenants/{t} {
-      allow read: if memberOf(t);
-      allow create: if signedIn();
-      allow update: if isAdmin(t) &&
-        !request.resource.data.diff(resource.data)
-          .affectedKeys().hasAny(['subscription','storage']);
+      allow read: if signedIn() && uid() == userId;
+      allow create: if validMemberProfileCreate(userId);
+      allow update: if validMemberProfileUpdate(userId) || adminRemovingMemberProfile(userId);
       allow delete: if false;
     }
 
-    match /tenants/{t}/members/{m} {
-      allow read: if memberOf(t);
-      allow write: if isAdmin(t);
+    match /teamInvitations/{inviteId} {
+      allow read, write: if false;
     }
 
-    match /tenants/{t}/invites/{code} {
-      allow read: if isAdmin(t);
-      allow create: if isAdmin(t);
-      allow update: if signedIn() && request.resource.data.used == true;
-    }
-
-    match /tenants/{t}/projects/{p} {
-      allow read: if memberOf(t);
-      allow create, update: if canWriteInvoices(t);
-      allow delete: if isAdmin(t);
-    }
-
-    match /tenants/{t}/counters/{c} {
-      allow read: if memberOf(t);
-      allow write: if false;   // Functions only
-    }
-
-    match /tenants/{t}/invoices/{i} {
-      allow read: if memberOf(t);
-      allow create: if canWriteInvoices(t) &&
-        request.resource.data.status == 'draft' &&
-        request.resource.data.serial == null;
-      allow update: if canWriteInvoices(t) &&
-        resource.data.status in ['draft','issued'];
+    match /tenants/{tenantId} {
+      allow read: if memberOf(tenantId);
+      allow create: if validTenantCreate(tenantId);
+      allow update: if isAdmin(tenantId) &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['name', 'ceoName', 'logoUrl', 'sealUrl', 'address', 'ntn', 'settings']) &&
+        request.resource.data.name is string &&
+        request.resource.data.name.size() > 0 &&
+        request.resource.data.name.size() <= 120 &&
+        request.resource.data.ceoName is string &&
+        request.resource.data.ceoName.size() > 0 &&
+        request.resource.data.ceoName.size() <= 120 &&
+        validBrandingImage(request.resource.data.logoUrl) &&
+        validBrandingImage(request.resource.data.sealUrl) &&
+        request.resource.data.address is string &&
+        request.resource.data.address.size() <= 300 &&
+        request.resource.data.ntn is string &&
+        request.resource.data.ntn.size() <= 40;
       allow delete: if false;
-    }
 
-    match /tenants/{t}/storage_ledger/{d} {
-      allow read: if isAdmin(t);
-      allow write: if false;
-    }
+      match /members/{memberId} {
+        allow read: if isAdmin(tenantId) || (memberOf(tenantId) && uid() == memberId);
+        allow create: if validOwnerMemberCreate(tenantId, memberId) ||
+          validInviteMemberCreate(tenantId, memberId);
+        allow delete: if isAdmin(tenantId) && memberId != uid() &&
+          resource.data.role in ['architect', 'viewer'] &&
+          getAfter(userPath(memberId)).data.tenantId == null;
+        allow update: if false;
+      }
 
-    match /tenants/{t}/billing/{m} {
-      allow read: if isAdmin(t);
-      allow write: if false;
+      match /invites/{inviteId} {
+        allow read: if isAdmin(tenantId) ||
+          (verifiedEmail() &&
+           resource.data.email == request.auth.token.email.lower() &&
+           resource.data.used == false &&
+           resource.data.expiresAt > request.time);
+        allow create: if verifiedEmail() && isAdmin(tenantId) &&
+          request.resource.data.keys().hasOnly([
+            'tenantId', 'email', 'phone', 'role', 'createdBy', 'createdAt', 'expiresAt', 'used'
+          ]) &&
+          inviteId.matches('^[a-f0-9]{64}$') &&
+          request.resource.data.tenantId == tenantId &&
+          request.resource.data.email is string &&
+          request.resource.data.email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$') &&
+          request.resource.data.phone is string &&
+          request.resource.data.phone.size() <= 30 &&
+          request.resource.data.role in ['architect', 'viewer'] &&
+          request.resource.data.createdBy == uid() &&
+          request.resource.data.expiresAt > request.time &&
+          request.resource.data.expiresAt <= request.time + duration.value(7, 'd') &&
+          request.resource.data.used == false;
+        allow update: if verifiedEmail() &&
+          resource.data.used == false &&
+          resource.data.expiresAt > request.time &&
+          resource.data.email == request.auth.token.email.lower() &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['used', 'acceptedBy', 'acceptedAt']) &&
+          request.resource.data.used == true &&
+          request.resource.data.acceptedBy == uid() &&
+          request.resource.data.acceptedAt == request.time &&
+          getAfter(memberPath(tenantId, uid())).data.inviteId == inviteId &&
+          getAfter(userPath(uid())).data.tenantId == tenantId;
+        allow delete: if isAdmin(tenantId) && resource.data.used == false;
+      }
+
+      match /projects/{projectId} {
+        allow read: if memberOf(tenantId);
+        allow create, update: if canWriteInvoices(tenantId);
+        allow delete: if isAdmin(tenantId);
+      }
+
+      match /counters/{counterId} {
+        allow read: if memberOf(tenantId);
+        allow write: if false;
+      }
+
+      match /invoices/{invoiceId} {
+        allow read: if memberOf(tenantId);
+        allow create: if canWriteInvoices(tenantId) &&
+          request.resource.data.status == 'draft' &&
+          request.resource.data.serial == null;
+        allow update: if canWriteInvoices(tenantId) &&
+          resource.data.status in ['draft', 'issued'];
+        allow delete: if false;
+      }
+
+      match /storage_ledger/{entryId} {
+        allow read: if isAdmin(tenantId);
+        allow write: if false;
+      }
+
+      match /billing/{monthId} {
+        allow read: if isAdmin(tenantId);
+        allow write: if false;
+      }
     }
   }
 }
