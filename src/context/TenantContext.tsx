@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { Category, InviteDoc, InvoiceDoc, LineItem, MemberDoc, ProjectDoc, Role, TeamInvitationResult, TenantDoc } from '../types';
-import { offlineStorage } from '../services/offlineStorage';
+import { emptyTenant, offlineStorage } from '../services/offlineStorage';
 import { api } from '../services/api';
 import { useToast } from './ToastContext';
 import { useAuth } from './AuthContext';
@@ -22,7 +22,6 @@ export type ScreenName =
   | 'invoice_preview'
   | 'pdf_viewer'
   | 'history'
-  | 'billing'
   | 'settings';
 
 interface TenantContextType {
@@ -50,22 +49,45 @@ interface TenantContextType {
   updateInvoiceStatus: (invoiceId: string, status: InvoiceDoc['status']) => Promise<void>;
   buyStoragePack: (productId: 'storage_pack_1gb' | 'storage_pack_5gb') => Promise<void>;
   renewSubscription: () => Promise<void>;
-  updateTenant: (updates: Partial<TenantDoc>) => void;
+  updateTenant: (updates: Partial<TenantDoc>) => Promise<void>;
 }
 
 const TenantContext = createContext<TenantContextType | undefined>(undefined);
 
+function isPermissionDenied(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null || !('code' in error)) return false;
+  return error.code === 'permission-denied' || error.code === 'firestore/permission-denied';
+}
+
 export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [tenant, setTenant] = useState<TenantDoc>(offlineStorage.loadTenant());
-  const [projects, setProjects] = useState<ProjectDoc[]>(offlineStorage.loadProjects());
-  const [invoices, setInvoices] = useState<InvoiceDoc[]>(offlineStorage.loadInvoices());
+  const [tenant, setTenant] = useState<TenantDoc>(emptyTenant());
+  const [projects, setProjects] = useState<ProjectDoc[]>([]);
+  const [invoices, setInvoices] = useState<InvoiceDoc[]>([]);
   const [members, setMembers] = useState<MemberDoc[]>([]);
   const [invitations, setInvitations] = useState<InviteDoc[]>([]);
+  const [loadedTenantId, setLoadedTenantId] = useState<string | null>(null);
   const [activeScreen, setActiveScreen] = useState<ScreenName>('dashboard');
   const [currentParams, setCurrentParams] = useState<any>(null);
 
   const { showToast } = useToast();
   const { user } = useAuth();
+  const previousUserId = useRef<string | null>(null);
+
+  useEffect(() => {
+    const userId = user?.uid || null;
+    if (previousUserId.current === userId) return;
+
+    const isPendingInviteSignIn =
+      previousUserId.current === null &&
+      userId !== null &&
+      activeScreen === 'signin' &&
+      typeof currentParams?.inviteToken === 'string';
+    previousUserId.current = userId;
+    if (isPendingInviteSignIn) return;
+
+    setCurrentParams(null);
+    setActiveScreen(userId ? 'dashboard' : 'signin');
+  }, [user?.uid]);
 
   const refreshTeam = async () => {
     if (!user?.tenantId || user.role !== 'admin') {
@@ -80,18 +102,84 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   useEffect(() => {
     let active = true;
-    if (!user?.tenantId) return () => { active = false; };
-    void api.loadTenant(user.tenantId)
+    if (!user?.tenantId) {
+      setTenant(emptyTenant());
+      setProjects([]);
+      setInvoices([]);
+      setMembers([]);
+      setInvitations([]);
+      setLoadedTenantId(null);
+      return () => { active = false; };
+    }
+
+    const tenantId = user.tenantId;
+    setMembers([]);
+    setInvitations([]);
+    setTenant(offlineStorage.loadTenant(tenantId));
+    setProjects(offlineStorage.loadProjects(tenantId));
+    setInvoices(offlineStorage.loadInvoices(tenantId));
+
+    void api.loadTenant(tenantId)
       .then((loadedTenant) => {
         if (active) {
           setTenant(loadedTenant);
+          setLoadedTenantId(tenantId);
           offlineStorage.saveTenant(loadedTenant);
         }
       })
       .catch((error: unknown) => {
         console.error('Unable to load company record.', error);
-        if (active) showToast(error instanceof Error ? error.message : 'Unable to load company data.', { type: 'error' });
+        if (active) {
+          if (isPermissionDenied(error)) {
+            setLoadedTenantId(null);
+            setTenant(emptyTenant());
+            setProjects([]);
+            setInvoices([]);
+            setMembers([]);
+            setInvitations([]);
+          }
+          showToast(error instanceof Error ? error.message : 'Unable to load company data.', { type: 'error' });
+        }
       });
+
+    void api.listProjects(tenantId)
+      .then((loadedProjects) => {
+        if (active) setProjects(loadedProjects);
+      })
+      .catch((error: unknown) => {
+        console.error('Unable to load company projects.', error);
+        if (active) {
+          if (isPermissionDenied(error)) {
+            setLoadedTenantId(null);
+            setTenant(emptyTenant());
+            setProjects([]);
+            setInvoices([]);
+            setMembers([]);
+            setInvitations([]);
+          }
+          showToast(error instanceof Error ? error.message : 'Unable to load company projects.', { type: 'error' });
+        }
+      });
+
+    void api.listInvoices(tenantId)
+      .then((loadedInvoices) => {
+        if (active) setInvoices(loadedInvoices);
+      })
+      .catch((error: unknown) => {
+        console.error('Unable to load company invoices.', error);
+        if (active) {
+          if (isPermissionDenied(error)) {
+            setLoadedTenantId(null);
+            setTenant(emptyTenant());
+            setProjects([]);
+            setInvoices([]);
+            setMembers([]);
+            setInvitations([]);
+          }
+          showToast(error instanceof Error ? error.message : 'Unable to load company invoices.', { type: 'error' });
+        }
+      });
+
     if (user.role === 'admin') {
       void refreshTeam().catch((error: unknown) => {
         console.error('Unable to load company team.', error);
@@ -99,12 +187,18 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       });
     }
     return () => { active = false; };
-  }, [user?.tenantId, user?.role]);
+  }, [user?.uid, user?.tenantId, user?.role]);
 
   const refreshData = () => {
-    setTenant(offlineStorage.loadTenant());
-    setProjects(offlineStorage.loadProjects());
-    setInvoices(offlineStorage.loadInvoices());
+    if (!user?.tenantId) {
+      setTenant(emptyTenant());
+      setProjects([]);
+      setInvoices([]);
+      return;
+    }
+    setTenant(offlineStorage.loadTenant(user.tenantId));
+    setProjects(offlineStorage.loadProjects(user.tenantId));
+    setInvoices(offlineStorage.loadInvoices(user.tenantId));
   };
 
   const navigateTo = useCallback((screen: ScreenName, params: any = null) => {
@@ -113,6 +207,12 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   }, []);
 
   const createProject = async (data: Omit<ProjectDoc, 'id' | 'createdAt'>): Promise<ProjectDoc> => {
+    if (!user?.tenantId || user.tenantId !== tenant.id) {
+      throw new Error('Join a company before creating a project.');
+    }
+    if (user.role !== 'admin' && user.role !== 'architect') {
+      throw new Error('Only company admins and architects can create projects.');
+    }
     const newProj = await api.createProject(data);
     setProjects((prev) => [newProj, ...prev]);
     showToast(`Project "${newProj.name}" created successfully!`, { type: 'success' });
@@ -126,9 +226,16 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     taxRate?: number;
     clientName: string;
   }): Promise<InvoiceDoc> => {
+    if (!user?.tenantId || user.tenantId !== tenant.id) {
+      throw new Error('Join a company before creating an invoice.');
+    }
+    if (user.role !== 'admin' && user.role !== 'architect') {
+      throw new Error('Only company admins and architects can create invoices.');
+    }
     const { serial, invoice } = await api.allocateSerialAndCreateInvoice({
       ...params,
       tenantId: tenant.id,
+      createdBy: user.uid,
     });
     setInvoices((prev) => [invoice, ...prev]);
     refreshData();
@@ -137,6 +244,12 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   };
 
   const issueInvoice = async (invoiceId: string): Promise<InvoiceDoc> => {
+    if (!user?.tenantId || user.tenantId !== tenant.id) {
+      throw new Error('Join a company before issuing an invoice.');
+    }
+    if (user.role !== 'admin' && user.role !== 'architect') {
+      throw new Error('Only company admins and architects can issue invoices.');
+    }
     const { invoice } = await api.issueInvoice(tenant.id, invoiceId);
     setInvoices((prev) => prev.map((inv) => (inv.id === invoiceId ? invoice : inv)));
     refreshData();
@@ -145,7 +258,13 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   };
 
   const updateInvoiceStatus = async (invoiceId: string, status: InvoiceDoc['status']) => {
-    const updated = await api.updateInvoiceStatus(invoiceId, status);
+    if (!user?.tenantId || user.tenantId !== tenant.id) {
+      throw new Error('Join a company before updating an invoice.');
+    }
+    if (user.role !== 'admin' && user.role !== 'architect') {
+      throw new Error('Only company admins and architects can update invoices.');
+    }
+    const updated = await api.updateInvoiceStatus(tenant.id, invoiceId, status);
     setInvoices((prev) => prev.map((inv) => (inv.id === invoiceId ? updated : inv)));
     showToast(`Invoice marked as ${status.toUpperCase()}`, { type: 'info' });
   };
@@ -164,8 +283,11 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     showToast(res.message, { type: 'success' });
   };
 
-  const updateTenant = (updates: Partial<TenantDoc>) => {
-    const updated = { ...tenant, ...updates };
+  const updateTenant = async (updates: Partial<TenantDoc>) => {
+    if (!user?.tenantId || user.tenantId !== tenant.id || user.role !== 'admin') {
+      throw new Error('Only a company admin can update company settings.');
+    }
+    const updated = await api.updateTenant(tenant.id, updates);
     setTenant(updated);
     offlineStorage.saveTenant(updated);
     showToast('Company settings updated successfully', { type: 'success' });
@@ -188,14 +310,16 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     showToast('Team member access was removed.', { type: 'success' });
   };
 
+  const hasLoadedTenant = Boolean(user?.tenantId) && loadedTenantId === user?.tenantId;
+
   return (
     <TenantContext.Provider
       value={{
-        tenant,
-        projects,
-        invoices,
-        members,
-        invitations,
+        tenant: hasLoadedTenant ? tenant : emptyTenant(user?.tenantId || ''),
+        projects: hasLoadedTenant ? projects : [],
+        invoices: hasLoadedTenant ? invoices : [],
+        members: hasLoadedTenant && user?.role === 'admin' ? members : [],
+        invitations: hasLoadedTenant && user?.role === 'admin' ? invitations : [],
         activeScreen,
         currentParams,
         navigateTo,

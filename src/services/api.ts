@@ -8,6 +8,7 @@ import {
   serverTimestamp,
   setDoc,
   Timestamp,
+  updateDoc,
   where,
   writeBatch,
 } from 'firebase/firestore';
@@ -15,7 +16,6 @@ import * as Crypto from 'expo-crypto';
 import { appConfig, buildApiUrl } from '../config/app';
 import { auth, db, functions, isFirebaseConfigured } from '../config/firebase';
 import { offlineStorage } from './offlineStorage';
-import { MOCK_USER } from './mockData';
 import { Category, CompanyRole, InviteDoc, InvoiceDoc, LineItem, MemberDoc, ProjectDoc, Role, TeamInvitationResult, TenantDoc } from '../types';
 
 const shouldUseRemoteApi = () => Boolean(appConfig.apiBaseUrl && appConfig.authProvider === 'cloudflare');
@@ -47,6 +47,32 @@ async function requestRemoteApi<T>(path: string, init?: RequestInit): Promise<T>
   }
 
   return (await response.json()) as T;
+}
+
+function dateString(value: unknown): string {
+  if (value instanceof Timestamp) return value.toDate().toISOString();
+  return typeof value === 'string' ? value : new Date().toISOString();
+}
+
+function projectFromSnapshot(snapshot: { id: string; data: () => Record<string, unknown> }, tenantId: string): ProjectDoc {
+  const data = snapshot.data();
+  return {
+    ...data,
+    id: snapshot.id,
+    tenantId,
+    createdAt: dateString(data.createdAt),
+  } as ProjectDoc;
+}
+
+function invoiceFromSnapshot(snapshot: { id: string; data: () => Record<string, unknown> }, tenantId: string): InvoiceDoc {
+  const data = snapshot.data();
+  return {
+    ...data,
+    id: snapshot.id,
+    tenantId,
+    createdAt: dateString(data.createdAt),
+    issuedAt: data.issuedAt == null ? null : dateString(data.issuedAt),
+  } as InvoiceDoc;
 }
 
 export const api = {
@@ -333,6 +359,40 @@ export const api = {
     } as TenantDoc;
   },
 
+  async listProjects(tenantId: string): Promise<ProjectDoc[]> {
+    if (isFirebaseConfigured && !shouldUseRemoteApi()) {
+      const snapshots = await getDocs(collection(db, 'tenants', tenantId, 'projects'));
+      const projects = snapshots.docs
+        .map((snapshot) => projectFromSnapshot(snapshot, tenantId))
+        .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+      offlineStorage.saveProjects(tenantId, projects);
+      return projects;
+    }
+    return offlineStorage.loadProjects(tenantId);
+  },
+
+  async listInvoices(tenantId: string): Promise<InvoiceDoc[]> {
+    if (isFirebaseConfigured && !shouldUseRemoteApi()) {
+      const snapshots = await getDocs(collection(db, 'tenants', tenantId, 'invoices'));
+      const invoices = snapshots.docs
+        .map((snapshot) => invoiceFromSnapshot(snapshot, tenantId))
+        .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+      offlineStorage.saveInvoices(tenantId, invoices);
+      return invoices;
+    }
+    return offlineStorage.loadInvoices(tenantId);
+  },
+
+  async updateTenant(tenantId: string, updates: Partial<TenantDoc>): Promise<TenantDoc> {
+    if (isFirebaseConfigured && !shouldUseRemoteApi()) {
+      await updateDoc(doc(db, 'tenants', tenantId), updates);
+      return api.loadTenant(tenantId);
+    }
+    const updated = { ...offlineStorage.loadTenant(tenantId), ...updates, id: tenantId };
+    offlineStorage.saveTenant(updated);
+    return updated;
+  },
+
   // Allocate Serial & Create Draft Invoice (§7.3)
   async allocateSerialAndCreateInvoice(params: {
     tenantId: string;
@@ -341,25 +401,41 @@ export const api = {
     lineItems: LineItem[];
     taxRate?: number;
     clientName: string;
+    createdBy: string;
   }): Promise<{ invoiceId: string; serial: string; invoice: InvoiceDoc }> {
     if (isFirebaseConfigured && !shouldUseRemoteApi()) {
-      try {
-        const callable = httpsCallable(functions, 'allocateSerialAndCreateInvoice');
-        const res: any = await callable(params);
-        return res.data;
-      } catch (err) {
-        console.warn('Firebase allocateSerialAndCreateInvoice failed, using local mode:', err);
-      }
+      const callable = httpsCallable<
+        typeof params,
+        { invoiceId: string; serial: string; subtotal: number; tax: number; total: number }
+      >(functions, 'allocateSerialAndCreateInvoice');
+      const result = await callable({
+        tenantId: params.tenantId,
+        projectId: params.projectId,
+        category: params.category,
+        lineItems: params.lineItems,
+        taxRate: params.taxRate,
+        clientName: params.clientName,
+      });
+      const invoiceSnapshot = await getDoc(
+        doc(db, 'tenants', params.tenantId, 'invoices', result.data.invoiceId),
+      );
+      if (!invoiceSnapshot.exists()) throw new Error('The saved invoice could not be loaded.');
+      const invoice = invoiceFromSnapshot(invoiceSnapshot, params.tenantId);
+      offlineStorage.saveInvoices(params.tenantId, [
+        invoice,
+        ...offlineStorage.loadInvoices(params.tenantId).filter((item) => item.id !== invoice.id),
+      ]);
+      return { invoiceId: invoice.id, serial: invoice.serial, invoice };
     }
 
     // Local atomic counter allocation matching spec §7.3
-    const tenant = offlineStorage.loadTenant();
+    const tenant = offlineStorage.loadTenant(params.tenantId);
     const fy = tenant.settings.invoiceDefaults.financialYear || new Date().getFullYear().toString();
     const prefix = tenant.settings.invoiceDefaults.prefix[params.category] || params.category.substring(0, 4).toUpperCase();
     const startAt = tenant.settings.invoiceDefaults.startAt[params.category] || 1;
 
     // Load existing invoices to find highest sequence for (category, fy)
-    const invoices = offlineStorage.loadInvoices();
+    const invoices = offlineStorage.loadInvoices(params.tenantId);
     const matchingInvoices = invoices.filter(
       (inv) => inv.category === params.category && inv.financialYear === fy
     );
@@ -375,8 +451,6 @@ export const api = {
     const total = Math.round((subtotal + tax) * 100) / 100;
 
     const invoiceId = `inv-${Date.now().toString(36)}`;
-    const user = offlineStorage.loadUser() || MOCK_USER;
-
     const newInvoice: InvoiceDoc = {
       id: invoiceId,
       tenantId: params.tenantId,
@@ -394,7 +468,7 @@ export const api = {
       status: 'draft',
       pdfPath: null,
       pdfSnapshotHash: null,
-      createdBy: user.uid,
+      createdBy: params.createdBy,
       createdAt: new Date().toISOString(),
       issuedAt: null,
     };
@@ -403,7 +477,7 @@ export const api = {
     tenant.settings.invoiceDefaults.startAt[params.category] = nextVal + 1;
     offlineStorage.saveTenant(tenant);
 
-    offlineStorage.saveInvoices([newInvoice, ...invoices]);
+    offlineStorage.saveInvoices(params.tenantId, [newInvoice, ...invoices]);
 
     return { invoiceId, serial, invoice: newInvoice };
   },
@@ -411,15 +485,19 @@ export const api = {
   // Issue Invoice & Generate PDF (§7.4)
   async issueInvoice(tenantId: string, invoiceId: string): Promise<{ success: boolean; invoice: InvoiceDoc }> {
     if (isFirebaseConfigured && !shouldUseRemoteApi()) {
-      try {
-        const callable = httpsCallable(functions, 'issueInvoiceAndGeneratePdf');
-        await callable({ tenantId, invoiceId });
-      } catch (err) {
-        console.warn('Firebase issueInvoiceAndGeneratePdf failed, falling back to local:', err);
-      }
+      const callable = httpsCallable(functions, 'issueInvoiceAndGeneratePdf');
+      await callable({ tenantId, invoiceId });
+      const invoiceSnapshot = await getDoc(doc(db, 'tenants', tenantId, 'invoices', invoiceId));
+      if (!invoiceSnapshot.exists()) throw new Error('The issued invoice could not be loaded.');
+      const invoice = invoiceFromSnapshot(invoiceSnapshot, tenantId);
+      offlineStorage.saveInvoices(tenantId, [
+        invoice,
+        ...offlineStorage.loadInvoices(tenantId).filter((item) => item.id !== invoice.id),
+      ]);
+      return { success: true, invoice };
     }
 
-    const invoices = offlineStorage.loadInvoices();
+    const invoices = offlineStorage.loadInvoices(tenantId);
     const idx = invoices.findIndex((i) => i.id === invoiceId);
     if (idx === -1) throw new Error('Invoice not found');
 
@@ -431,10 +509,10 @@ export const api = {
     };
 
     invoices[idx] = updated;
-    offlineStorage.saveInvoices([...invoices]);
+    offlineStorage.saveInvoices(tenantId, invoices);
 
     // Update storage usage by ~250KB for PDF
-    const tenant = offlineStorage.loadTenant();
+    const tenant = offlineStorage.loadTenant(tenantId);
     tenant.storage.usedBytes += 256 * 1024;
     offlineStorage.saveTenant(tenant);
 
@@ -456,7 +534,7 @@ export const api = {
       }
     }
 
-    const tenant = offlineStorage.loadTenant();
+    const tenant = offlineStorage.loadTenant(tenantId);
     const now = new Date();
 
     if (productId === 'core_monthly') {
@@ -481,24 +559,47 @@ export const api = {
 
   // Create Project
   async createProject(project: Omit<ProjectDoc, 'id' | 'createdAt'>): Promise<ProjectDoc> {
-    const projects = offlineStorage.loadProjects();
+    const projectId = isFirebaseConfigured && !shouldUseRemoteApi()
+      ? doc(collection(db, 'tenants', project.tenantId, 'projects')).id
+      : `proj-${Date.now().toString(36)}`;
     const newProj: ProjectDoc = {
       ...project,
-      id: `proj-${Date.now().toString(36)}`,
+      id: projectId,
       createdAt: new Date().toISOString(),
     };
-    offlineStorage.saveProjects([newProj, ...projects]);
+    if (isFirebaseConfigured && !shouldUseRemoteApi()) {
+      const { id: _id, createdAt: _createdAt, ...projectData } = newProj;
+      await setDoc(doc(db, 'tenants', project.tenantId, 'projects', projectId), {
+        ...projectData,
+        createdAt: serverTimestamp(),
+      });
+    }
+    const projects = offlineStorage.loadProjects(project.tenantId);
+    offlineStorage.saveProjects(project.tenantId, [newProj, ...projects]);
     return newProj;
   },
 
   // Update Invoice Status (e.g. Paid, Cancelled)
-  async updateInvoiceStatus(invoiceId: string, status: InvoiceDoc['status']): Promise<InvoiceDoc> {
-    const invoices = offlineStorage.loadInvoices();
+  async updateInvoiceStatus(tenantId: string, invoiceId: string, status: InvoiceDoc['status']): Promise<InvoiceDoc> {
+    if (isFirebaseConfigured && !shouldUseRemoteApi()) {
+      const invoiceRef = doc(db, 'tenants', tenantId, 'invoices', invoiceId);
+      await updateDoc(invoiceRef, { status });
+      const snapshot = await getDoc(invoiceRef);
+      if (!snapshot.exists()) throw new Error('Invoice not found.');
+      const invoice = invoiceFromSnapshot(snapshot, tenantId);
+      offlineStorage.saveInvoices(tenantId, [
+        invoice,
+        ...offlineStorage.loadInvoices(tenantId).filter((item) => item.id !== invoice.id),
+      ]);
+      return invoice;
+    }
+
+    const invoices = offlineStorage.loadInvoices(tenantId);
     const idx = invoices.findIndex((i) => i.id === invoiceId);
     if (idx === -1) throw new Error('Invoice not found');
 
     invoices[idx] = { ...invoices[idx], status };
-    offlineStorage.saveInvoices([...invoices]);
+    offlineStorage.saveInvoices(tenantId, invoices);
     return invoices[idx];
   },
 };

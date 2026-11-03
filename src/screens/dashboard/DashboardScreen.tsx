@@ -5,11 +5,8 @@ import { Header } from '../../components/Header';
 import { Card } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { StatCard } from '../../components/StatCard';
-import { ProgressBar } from '../../components/ProgressBar';
 import { formatPKR, formatCompactPKR } from '../../util/currency';
-import { formatBytes } from '../../util/calculations';
 import { formatDate } from '../../util/dates';
-import pricing from '../../../config/pricing.json';
 
 export const DashboardScreen: React.FC = () => {
   const { tenant, projects, invoices, members, navigateTo } = useTenant();
@@ -20,19 +17,6 @@ export const DashboardScreen: React.FC = () => {
   const totalBilledPkr = issuedInvoices.reduce((sum, inv) => sum + inv.total, 0);
   const pendingInvoicesCount = invoices.filter((i) => i.status === 'draft').length;
 
-  // Storage calculation
-  const totalStorageQuotaBytes =
-    ((tenant.storage?.includedGb || 1) + (tenant.storage?.purchasedGb || 0)) * 1024 * 1024 * 1024;
-  const usedStorageBytes = tenant.storage?.usedBytes || 0;
-  const storagePct = (usedStorageBytes / totalStorageQuotaBytes) * 100;
-
-  // Egress calculation
-  const hardCapBytes = (pricing.egress.hardCapGbPerMonth || 10) * 1024 * 1024 * 1024;
-  const usedEgressBytes = tenant.storage?.egressMonthBytes || 0;
-  const egressPct = (usedEgressBytes / hardCapBytes) * 100;
-
-  const subStatus = tenant.subscription?.status || 'active';
-
   return (
     <View style={styles.container}>
       <Header
@@ -41,41 +25,6 @@ export const DashboardScreen: React.FC = () => {
       />
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Subscription & Quota Warning Banner if Grace or Locked */}
-        {subStatus !== 'active' && (
-          <View
-            style={[
-              styles.alertBanner,
-              { backgroundColor: subStatus === 'grace' ? '#fef3c7' : '#fee2e2' },
-            ]}
-          >
-            <Text style={styles.alertIcon}>{subStatus === 'grace' ? '⚠️' : '🔒'}</Text>
-            <View style={styles.alertTextWrap}>
-              <Text
-                style={[
-                  styles.alertTitle,
-                  { color: subStatus === 'grace' ? '#92400e' : '#991b1b' },
-                ]}
-              >
-                {subStatus === 'grace'
-                  ? 'Subscription Grace Period Active'
-                  : 'Subscription Locked - Read-Only Mode'}
-              </Text>
-              <Text style={styles.alertDesc}>
-                {subStatus === 'grace'
-                  ? 'Your monthly core subscription requires renewal within 3 days.'
-                  : 'Invoice creation is locked until subscription is renewed.'}
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={styles.alertActionBtn}
-              onPress={() => navigateTo('billing')}
-            >
-              <Text style={styles.alertActionText}>Renew</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
         {/* Top KPI Stat Cards */}
         <View style={styles.statsRow}>
           <StatCard
@@ -104,54 +53,8 @@ export const DashboardScreen: React.FC = () => {
           />
         </View>
 
-        {/* Quotas & Capacity Card */}
-        <Card style={styles.quotasCard}>
-          <View style={styles.cardHeader}>
-            <View>
-              <Text style={styles.cardTitle}>Cloud Resource Quotas & Meters</Text>
-              <Text style={styles.cardSubtitle}>
-                Monitored for cost-safety per single source of truth config/pricing.json
-              </Text>
-            </View>
-            <Badge label={subStatus} variant={subStatus as any} />
-          </View>
-
-          <ProgressBar
-            label="Storage Space"
-            used={formatBytes(usedStorageBytes)}
-            total={formatBytes(totalStorageQuotaBytes)}
-            percentage={storagePct}
-          />
-
-          <ProgressBar
-            label="Monthly Bandwidth / Egress"
-            used={formatBytes(usedEgressBytes)}
-            total={formatBytes(hardCapBytes)}
-            percentage={egressPct}
-          />
-
-          <View style={styles.quotaActionsRow}>
-            <TouchableOpacity
-              style={styles.quotaActionBtn}
-              onPress={() => navigateTo('billing')}
-            >
-              <Text style={styles.quotaActionText}>+ Buy 1 GB Storage Pack (PKR 100)</Text>
-            </TouchableOpacity>
-          </View>
-        </Card>
-
         {/* Quick Action Buttons */}
         <View style={styles.quickActionsRow}>
-          <TouchableOpacity
-            style={[styles.actionCard, { backgroundColor: '#0f172a' }]}
-            onPress={() => navigateTo('create_invoice')}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.actionCardIcon}>⚡</Text>
-            <Text style={styles.actionCardTitle}>Create Invoice</Text>
-            <Text style={styles.actionCardDesc}>Allocate serial & calculate PKR</Text>
-          </TouchableOpacity>
-
           <TouchableOpacity
             style={[styles.actionCard, { backgroundColor: '#2563eb' }]}
             onPress={() => navigateTo('create_project')}
@@ -222,51 +125,11 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center',
   },
-  alertBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 10,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  alertIcon: {
-    fontSize: 22,
-    marginRight: 12,
-  },
-  alertTextWrap: {
-    flex: 1,
-  },
-  alertTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  alertDesc: {
-    fontSize: 12,
-    color: '#4b5563',
-    marginTop: 2,
-  },
-  alertActionBtn: {
-    backgroundColor: '#0f172a',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    marginLeft: 10,
-  },
-  alertActionText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '700',
-  },
   statsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     marginHorizontal: -6,
     marginBottom: 16,
-  },
-  quotasCard: {
-    marginBottom: 20,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -283,22 +146,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#64748b',
     marginTop: 2,
-  },
-  quotaActionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 10,
-  },
-  quotaActionBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    backgroundColor: '#eff6ff',
-    borderRadius: 6,
-  },
-  quotaActionText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#2563eb',
   },
   quickActionsRow: {
     flexDirection: 'row',

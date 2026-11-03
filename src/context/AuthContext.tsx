@@ -7,7 +7,7 @@ import {
   signInWithPopup,
   signOut as firebaseSignOut,
 } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { Role, UserDoc } from '../types';
 import { auth, db, isFirebaseConfigured } from '../config/firebase';
 import { appConfig, buildApiUrl } from '../config/app';
@@ -98,18 +98,36 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return;
     }
     let active = true;
+    let unsubscribeProfile = () => {};
     const unsubscribe = onAuthStateChanged(
       auth,
-      async (firebaseUser) => {
-        try {
-          const nextUser = firebaseUser ? await loadProfile(firebaseUser) : null;
-          if (active) setUser(nextUser);
-        } catch (error) {
-          console.error('Unable to load signed-in user profile.', error);
-          if (active && firebaseUser) setUser(mapFirebaseUser(firebaseUser));
-        } finally {
-          if (active) setLoading(false);
+      (firebaseUser) => {
+        unsubscribeProfile();
+        if (!active) return;
+        setUser(null);
+        setLoading(Boolean(firebaseUser));
+        if (!firebaseUser) {
+          setLoading(false);
+          return;
         }
+        unsubscribeProfile = onSnapshot(
+          doc(db, 'users', firebaseUser.uid),
+          (snapshot) => {
+            if (!active || auth.currentUser?.uid !== firebaseUser.uid) return;
+            setUser(mapFirebaseUser(
+              firebaseUser,
+              snapshot.exists() ? snapshot.data() as Record<string, unknown> : {},
+            ));
+            setLoading(false);
+          },
+          (error) => {
+            console.error('Unable to watch signed-in user profile.', error);
+            if (active && auth.currentUser?.uid === firebaseUser.uid) {
+              setUser(mapFirebaseUser(firebaseUser));
+              setLoading(false);
+            }
+          },
+        );
       },
       (error) => {
         console.error('Firebase authentication state listener failed.', error);
@@ -121,6 +139,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     );
     return () => {
       active = false;
+      unsubscribeProfile();
       unsubscribe();
     };
   }, []);

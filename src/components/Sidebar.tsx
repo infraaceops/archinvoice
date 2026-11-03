@@ -10,15 +10,11 @@ export const Sidebar: React.FC = () => {
   const firmNavItems: Array<{ screen: ScreenName; label: string; icon: string }> = [
     { screen: 'dashboard', label: 'Dashboard', icon: '📊' },
     { screen: 'projects', label: 'Projects', icon: '📐' },
-    { screen: 'notifications', label: 'Notifications', icon: '🔔' },
-    { screen: 'create_invoice', label: 'Create Invoice', icon: '⚡' },
     { screen: 'history', label: 'Invoices History', icon: '📜' },
-    { screen: 'billing', label: 'Billing & Quotas', icon: '💳' },
     { screen: 'settings', label: 'Company Settings', icon: '⚙️' },
   ];
   const clientNavItems: Array<{ screen: ScreenName; label: string; icon: string }> = [
     { screen: 'projects', label: 'Projects', icon: '📐' },
-    { screen: 'notifications', label: 'Notifications', icon: '🔔' },
     { screen: 'profile', label: 'Profile', icon: '👤' },
   ];
   const navItems = role === 'client' ? clientNavItems : firmNavItems;

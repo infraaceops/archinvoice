@@ -1,128 +1,142 @@
-import { InvoiceDoc, ProjectDoc, TenantDoc, UserDoc } from '../types';
-import { MOCK_INVOICES, MOCK_PROJECTS, MOCK_TENANT, MOCK_USER } from './mockData';
+import { InvoiceDoc, ProjectDoc, TenantDoc } from '../types';
 
 const STORAGE_KEYS = {
-  USER: '@arch_user',
   TENANT: '@arch_tenant',
   PROJECTS: '@arch_projects',
   INVOICES: '@arch_invoices',
   OFFLINE_DRAFTS: '@arch_offline_drafts',
 };
 
-// Cross-platform in-memory and web storage fallback
 const memoryCache: Record<string, string> = {};
+
+function scopedKey(key: string, tenantId: string): string {
+  if (!tenantId.trim()) throw new Error('A company ID is required to access company data.');
+  return `${key}:${encodeURIComponent(tenantId)}`;
+}
 
 function setItem(key: string, value: string): void {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
       window.localStorage.setItem(key, value);
     }
-  } catch {}
+  } catch {
+    // Keep the current session usable when browser storage is unavailable.
+  }
   memoryCache[key] = value;
 }
 
 function getItem(key: string): string | null {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
-      const val = window.localStorage.getItem(key);
-      if (val !== null) return val;
+      const value = window.localStorage.getItem(key);
+      if (value !== null) return value;
     }
-  } catch {}
+  } catch {
+    // Use the in-memory copy when browser storage is unavailable.
+  }
   return memoryCache[key] || null;
 }
 
+export function emptyTenant(id = ''): TenantDoc {
+  const now = new Date().toISOString();
+  return {
+    id,
+    name: '',
+    ceoName: '',
+    logoUrl: null,
+    sealUrl: null,
+    address: '',
+    ntn: '',
+    currency: 'PKR',
+    subscription: {
+      status: 'active',
+      plan: 'core_monthly',
+      pricePkr: 0,
+      currentPeriodEnd: now,
+      purchaseToken: '',
+      productId: 'core_monthly',
+    },
+    storage: {
+      includedGb: 0,
+      purchasedGb: 0,
+      usedBytes: 0,
+      egressMonthBytes: 0,
+      egressMonthKey: now.slice(0, 7),
+      lastMeteredAt: now,
+      throttled: false,
+    },
+    settings: {
+      invoiceDefaults: {
+        prefix: { architecture: 'ARCH', interior: 'INT', supervision: 'SUP' },
+        startAt: { architecture: 1, interior: 1, supervision: 1 },
+        financialYear: String(new Date().getFullYear()),
+      },
+    },
+    createdAt: now,
+  };
+}
+
+function readArray<T>(key: string): T[] {
+  const raw = getItem(key);
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed as T[] : [];
+  } catch {
+    return [];
+  }
+}
+
 export const offlineStorage = {
-  loadUser(): UserDoc | null {
-    const raw = getItem(STORAGE_KEYS.USER);
-    if (raw === null) {
-      setItem(STORAGE_KEYS.USER, JSON.stringify(MOCK_USER));
-      return MOCK_USER;
-    }
-    if (raw === '' || raw === 'null') return null;
+  loadTenant(tenantId: string): TenantDoc {
+    const raw = getItem(scopedKey(STORAGE_KEYS.TENANT, tenantId));
+    if (!raw) return emptyTenant(tenantId);
     try {
-      return JSON.parse(raw);
+      const tenant = JSON.parse(raw) as TenantDoc;
+      return tenant.id === tenantId ? tenant : emptyTenant(tenantId);
     } catch {
-      return null;
-    }
-  },
-
-  saveUser(user: UserDoc | null): void {
-    if (!user) {
-      setItem(STORAGE_KEYS.USER, 'null');
-      return;
-    }
-    setItem(STORAGE_KEYS.USER, JSON.stringify(user));
-  },
-
-  loadTenant(): TenantDoc {
-    const raw = getItem(STORAGE_KEYS.TENANT);
-    if (!raw) {
-      setItem(STORAGE_KEYS.TENANT, JSON.stringify(MOCK_TENANT));
-      return MOCK_TENANT;
-    }
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return MOCK_TENANT;
+      return emptyTenant(tenantId);
     }
   },
 
   saveTenant(tenant: TenantDoc): void {
-    setItem(STORAGE_KEYS.TENANT, JSON.stringify(tenant));
+    setItem(scopedKey(STORAGE_KEYS.TENANT, tenant.id), JSON.stringify(tenant));
   },
 
-  loadProjects(): ProjectDoc[] {
-    const raw = getItem(STORAGE_KEYS.PROJECTS);
-    if (!raw) {
-      setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(MOCK_PROJECTS));
-      return MOCK_PROJECTS;
-    }
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return MOCK_PROJECTS;
-    }
+  loadProjects(tenantId: string): ProjectDoc[] {
+    return readArray<ProjectDoc>(scopedKey(STORAGE_KEYS.PROJECTS, tenantId))
+      .filter((project) => project.tenantId === tenantId);
   },
 
-  saveProjects(projects: ProjectDoc[]): void {
-    setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(projects));
+  saveProjects(tenantId: string, projects: ProjectDoc[]): void {
+    setItem(
+      scopedKey(STORAGE_KEYS.PROJECTS, tenantId),
+      JSON.stringify(projects.filter((project) => project.tenantId === tenantId)),
+    );
   },
 
-  loadInvoices(): InvoiceDoc[] {
-    const raw = getItem(STORAGE_KEYS.INVOICES);
-    if (!raw) {
-      setItem(STORAGE_KEYS.INVOICES, JSON.stringify(MOCK_INVOICES));
-      return MOCK_INVOICES;
-    }
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return MOCK_INVOICES;
-    }
+  loadInvoices(tenantId: string): InvoiceDoc[] {
+    return readArray<InvoiceDoc>(scopedKey(STORAGE_KEYS.INVOICES, tenantId))
+      .filter((invoice) => invoice.tenantId === tenantId);
   },
 
-  saveInvoices(invoices: InvoiceDoc[]): void {
-    setItem(STORAGE_KEYS.INVOICES, JSON.stringify(invoices));
+  saveInvoices(tenantId: string, invoices: InvoiceDoc[]): void {
+    setItem(
+      scopedKey(STORAGE_KEYS.INVOICES, tenantId),
+      JSON.stringify(invoices.filter((invoice) => invoice.tenantId === tenantId)),
+    );
   },
 
-  saveDraft(draft: Partial<InvoiceDoc>): void {
-    const raw = getItem(STORAGE_KEYS.OFFLINE_DRAFTS);
-    let list: Array<Partial<InvoiceDoc>> = [];
-    try {
-      list = raw ? JSON.parse(raw) : [];
-    } catch {
-      list = [];
-    }
-    list = [draft, ...list.filter((d) => d.id !== draft.id)];
-    setItem(STORAGE_KEYS.OFFLINE_DRAFTS, JSON.stringify(list));
+  saveDraft(tenantId: string, draft: Partial<InvoiceDoc>): void {
+    const draftsKey = scopedKey(STORAGE_KEYS.OFFLINE_DRAFTS, tenantId);
+    const drafts = readArray<Partial<InvoiceDoc>>(draftsKey);
+    setItem(
+      draftsKey,
+      JSON.stringify([draft, ...drafts.filter((existing) => existing.id !== draft.id)]),
+    );
   },
 
-  loadDrafts(): Array<Partial<InvoiceDoc>> {
-    const raw = getItem(STORAGE_KEYS.OFFLINE_DRAFTS);
-    try {
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
+  loadDrafts(tenantId: string): Array<Partial<InvoiceDoc>> {
+    return readArray<Partial<InvoiceDoc>>(scopedKey(STORAGE_KEYS.OFFLINE_DRAFTS, tenantId));
   },
 };

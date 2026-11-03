@@ -22,7 +22,6 @@ import { CreateInvoiceScreen } from '../screens/invoices/CreateInvoiceScreen';
 import { InvoicePreviewScreen } from '../screens/invoices/InvoicePreviewScreen';
 import { PdfViewerScreen } from '../screens/invoices/PdfViewerScreen';
 import { InvoiceHistoryScreen } from '../screens/invoices/InvoiceHistoryScreen';
-import { BillingScreen } from '../screens/billing/BillingScreen';
 import { SettingsScreen } from '../screens/settings/SettingsScreen';
 import { ProfileScreen } from '../screens/auth/ProfileScreen';
 
@@ -109,8 +108,6 @@ export const AppNavigator: React.FC = () => {
         return <PdfViewerScreen />;
       case 'history':
         return <InvoiceHistoryScreen />;
-      case 'billing':
-        return <BillingScreen />;
       case 'settings':
         return <SettingsScreen />;
       case 'profile':

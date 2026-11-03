@@ -76,6 +76,7 @@ export const allocateSerialAndCreateInvoice = onCall(async (req) => {
     );
 
     tx.set(invoiceRef, {
+      tenantId,
       serial,
       category,
       financialYear: fy,

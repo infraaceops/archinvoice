@@ -170,6 +170,13 @@ automatically. Team members must sign in with the invited Google email.
 Removing a member revokes their company membership but does not delete their
 Firebase Authentication account.
 
+On the Firebase backend, projects and invoices are stored in the signed-in
+member's company Firestore collections, and company/project/invoice reads are
+authorized by company membership rules. The local offline cache is keyed by
+company ID; accounts without a company membership start with no company data.
+Company settings and project/invoice changes are shared with invited teammates
+after they accept an invitation using the invited Google email.
+
 ### Firebase and Google configuration
 
 1. Create a Firebase project and register a Firebase Web app. Enable **Google**

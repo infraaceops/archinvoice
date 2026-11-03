@@ -39,7 +39,7 @@ export const SettingsScreen: React.FC = () => {
   const [removingMember, setRemovingMember] = useState<string | null>(null);
   const [teamLoading, setTeamLoading] = useState(false);
 
-  const handleSaveCompany = () => {
+  const handleSaveCompany = async () => {
     if (role !== 'admin') {
       showToast('Permission Denied: Only Admin can update company profile and settings.', {
         type: 'error',
@@ -47,27 +47,33 @@ export const SettingsScreen: React.FC = () => {
       return;
     }
 
-    updateTenant({
-      name,
-      ceoName,
-      address,
-      ntn,
-      settings: {
-        invoiceDefaults: {
-          financialYear,
-          prefix: {
-            architecture: archPrefix,
-            interior: interiorPrefix,
-            supervision: supervisionPrefix,
-          },
-          startAt: tenant.settings?.invoiceDefaults?.startAt || {
-            architecture: 1,
-            interior: 1,
-            supervision: 1,
+    try {
+      await updateTenant({
+        name,
+        ceoName,
+        address,
+        ntn,
+        settings: {
+          invoiceDefaults: {
+            financialYear,
+            prefix: {
+              architecture: archPrefix,
+              interior: interiorPrefix,
+              supervision: supervisionPrefix,
+            },
+            startAt: tenant.settings?.invoiceDefaults?.startAt || {
+              architecture: 1,
+              interior: 1,
+              supervision: 1,
+            },
           },
         },
-      },
-    });
+      });
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not save company settings.', {
+        type: 'error',
+      });
+    }
   };
 
   const handleInviteTeamMember = async () => {
