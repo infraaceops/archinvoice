@@ -30,7 +30,7 @@ export const Sidebar: React.FC = () => {
           <Text style={styles.brandTitle} numberOfLines={1}>
             {tenant?.name || 'ArchInvoice'}
           </Text>
-          <Text style={styles.brandSubtitle}>SaaS Architecture App</Text>
+          <Text style={styles.brandSubtitle}>Projects & Billing</Text>
         </View>
       </View>
 

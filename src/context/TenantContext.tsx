@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
-import { Category, InviteDoc, InvoiceDoc, LineItem, MemberDoc, ProjectDoc, Role, TeamInvitationResult, TenantDoc } from '../types';
+import { Category, InvoiceDoc, LineItem, ProjectDoc, Role, TenantDoc } from '../types';
 import { emptyTenant, offlineStorage } from '../services/offlineStorage';
 import { api } from '../services/api';
 import { collaboration } from '../services/collaboration';
@@ -9,9 +9,7 @@ import { useAuth } from './AuthContext';
 export type ScreenName =
   | 'splash'
   | 'signin'
-  | 'onboarding'
   | 'create_company'
-  | 'join_company'
   | 'dashboard'
   | 'projects'
   | 'create_project'
@@ -29,15 +27,10 @@ interface TenantContextType {
   tenant: TenantDoc;
   projects: ProjectDoc[];
   invoices: InvoiceDoc[];
-  members: MemberDoc[];
-  invitations: InviteDoc[];
   activeScreen: ScreenName;
   currentParams: any;
   navigateTo: (screen: ScreenName, params?: any) => void;
   refreshData: () => void;
-  refreshTeam: () => Promise<void>;
-  inviteTeamMember: (data: { email: string; phone?: string; role: 'architect' | 'viewer' }) => Promise<TeamInvitationResult>;
-  removeTeamMember: (uid: string) => Promise<void>;
   createProject: (data: Omit<ProjectDoc, 'id' | 'createdAt'>) => Promise<ProjectDoc>;
   deleteProject: (projectId: string) => Promise<void>;
   createInvoice: (params: {
@@ -67,8 +60,6 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [tenant, setTenant] = useState<TenantDoc>(emptyTenant());
   const [projects, setProjects] = useState<ProjectDoc[]>([]);
   const [invoices, setInvoices] = useState<InvoiceDoc[]>([]);
-  const [members, setMembers] = useState<MemberDoc[]>([]);
-  const [invitations, setInvitations] = useState<InviteDoc[]>([]);
   const [loadedTenantId, setLoadedTenantId] = useState<string | null>(null);
   const [activeScreen, setActiveScreen] = useState<ScreenName>('dashboard');
   const [currentParams, setCurrentParams] = useState<any>(null);
@@ -81,28 +72,11 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const userId = user?.uid || null;
     if (previousUserId.current === userId) return;
 
-    const isPendingInviteSignIn =
-      previousUserId.current === null &&
-      userId !== null &&
-      activeScreen === 'signin' &&
-      typeof currentParams?.inviteToken === 'string';
     previousUserId.current = userId;
-    if (isPendingInviteSignIn) return;
 
     setCurrentParams(null);
     setActiveScreen(userId ? 'dashboard' : 'signin');
   }, [user?.uid]);
-
-  const refreshTeam = async () => {
-    if (!user?.tenantId || user.role !== 'admin') {
-      setMembers([]);
-      setInvitations([]);
-      return;
-    }
-    const team = await api.listTenantTeam();
-    setMembers(team.members.map((member) => ({ ...member, status: 'active' })));
-    setInvitations(team.invitations);
-  };
 
   useEffect(() => {
     let active = true;
@@ -110,15 +84,11 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       setTenant(emptyTenant());
       setProjects([]);
       setInvoices([]);
-      setMembers([]);
-      setInvitations([]);
       setLoadedTenantId(null);
       return () => { active = false; };
     }
 
     const tenantId = user.tenantId;
-    setMembers([]);
-    setInvitations([]);
     setTenant(offlineStorage.loadTenant(tenantId));
     setProjects(offlineStorage.loadProjects(tenantId));
     setInvoices(offlineStorage.loadInvoices(tenantId));
@@ -139,8 +109,6 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             setTenant(emptyTenant());
             setProjects([]);
             setInvoices([]);
-            setMembers([]);
-            setInvitations([]);
           }
           showToast(error instanceof Error ? error.message : 'Unable to load company data.', { type: 'error' });
         }
@@ -158,8 +126,6 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             setTenant(emptyTenant());
             setProjects([]);
             setInvoices([]);
-            setMembers([]);
-            setInvitations([]);
           }
           showToast(error instanceof Error ? error.message : 'Unable to load company projects.', { type: 'error' });
         }
@@ -177,19 +143,11 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             setTenant(emptyTenant());
             setProjects([]);
             setInvoices([]);
-            setMembers([]);
-            setInvitations([]);
           }
           showToast(error instanceof Error ? error.message : 'Unable to load company invoices.', { type: 'error' });
         }
       });
 
-    if (user.role === 'admin') {
-      void refreshTeam().catch((error: unknown) => {
-        console.error('Unable to load company team.', error);
-        if (active) showToast(error instanceof Error ? error.message : 'Unable to load team members.', { type: 'error' });
-      });
-    }
     return () => { active = false; };
   }, [user?.uid, user?.tenantId, user?.role]);
 
@@ -212,7 +170,7 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const createProject = async (data: Omit<ProjectDoc, 'id' | 'createdAt'>): Promise<ProjectDoc> => {
     if (!user?.tenantId || user.tenantId !== tenant.id) {
-      throw new Error('Join a company before creating a project.');
+      throw new Error('Set up your company before creating a project.');
     }
     if (user.role !== 'admin' && user.role !== 'architect') {
       throw new Error('Only company admins and architects can create projects.');
@@ -325,31 +283,12 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setTenant(emptyTenant());
     setProjects([]);
     setInvoices([]);
-    setMembers([]);
-    setInvitations([]);
     setLoadedTenantId(null);
     await refreshUser();
     navigateTo('create_company');
     showToast('Company archived. Its records are preserved and member access has been removed.', {
       type: 'success',
     });
-  };
-
-  const inviteTeamMember = async (data: {
-    email: string;
-    phone?: string;
-    role: 'architect' | 'viewer';
-  }): Promise<TeamInvitationResult> => {
-    const invitation = await api.createTeamInvitation(data);
-    await refreshTeam();
-    showToast(`A one-time invitation link was created for ${data.email}.`, { type: 'success' });
-    return invitation;
-  };
-
-  const removeTeamMember = async (uid: string): Promise<void> => {
-    await api.removeTeamMember(uid);
-    await refreshTeam();
-    showToast('Team member access was removed.', { type: 'success' });
   };
 
   const hasLoadedTenant = Boolean(user?.tenantId) && loadedTenantId === user?.tenantId;
@@ -360,15 +299,10 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         tenant: hasLoadedTenant ? tenant : emptyTenant(user?.tenantId || ''),
         projects: hasLoadedTenant ? projects : [],
         invoices: hasLoadedTenant ? invoices : [],
-        members: hasLoadedTenant && user?.role === 'admin' ? members : [],
-        invitations: hasLoadedTenant && user?.role === 'admin' ? invitations : [],
         activeScreen,
         currentParams,
         navigateTo,
         refreshData,
-        refreshTeam,
-        inviteTeamMember,
-        removeTeamMember,
         createProject,
         deleteProject,
         createInvoice,

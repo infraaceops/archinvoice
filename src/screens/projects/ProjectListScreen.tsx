@@ -33,7 +33,7 @@ export const ProjectListScreen: React.FC = () => {
     <View style={styles.container}>
       <Header
         title="Projects"
-        subtitle={role === 'client' ? 'Your assigned project workspaces' : `${visibleProjects.length} architectural & interior commissions`}
+        subtitle={role === 'client' ? 'Your assigned project reviews' : `${visibleProjects.length} architectural & interior commissions`}
         rightAction={role !== 'client' ? (
           <Button
             title="+ New Project"
@@ -124,9 +124,6 @@ export const ProjectListScreen: React.FC = () => {
 
               {/* Architects & Actions */}
               <View style={styles.cardFooter}>
-                {role !== 'client' && <Text style={styles.architectsText} numberOfLines={1}>
-                  Architects: {project.assignedArchitects?.join(', ') || 'Unassigned'}
-                </Text>}
                 <View style={styles.actionBtnsRow}>
                   <TouchableOpacity
                     style={styles.actionBtnOutline}
@@ -298,11 +295,6 @@ const styles = StyleSheet.create({
     borderTopColor: '#f1f5f9',
     paddingTop: 12,
     marginTop: 6,
-  },
-  architectsText: {
-    fontSize: 11,
-    color: '#64748b',
-    marginBottom: 10,
   },
   actionBtnsRow: {
     flexDirection: 'row',

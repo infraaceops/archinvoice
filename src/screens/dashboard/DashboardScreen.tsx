@@ -9,7 +9,7 @@ import { formatPKR, formatCompactPKR } from '../../util/currency';
 import { formatDate } from '../../util/dates';
 
 export const DashboardScreen: React.FC = () => {
-  const { tenant, projects, invoices, members, navigateTo } = useTenant();
+  const { tenant, projects, invoices, navigateTo } = useTenant();
 
   // Compute metrics
   const activeProjectsCount = projects.filter((p) => p.status === 'active').length;
@@ -46,9 +46,9 @@ export const DashboardScreen: React.FC = () => {
             accentColor="#f59e0b"
           />
           <StatCard
-            title="Practice Members"
-            value={members.length}
-            subtitle="Admin & Architects"
+            title="Total Projects"
+            value={projects.length}
+            subtitle="Projects in your company"
             accentColor="#10b981"
           />
         </View>

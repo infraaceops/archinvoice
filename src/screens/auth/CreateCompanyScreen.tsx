@@ -204,13 +204,6 @@ export const CreateCompanyScreen: React.FC = () => {
 
         <TouchableOpacity
           style={styles.backLink}
-          onPress={() => navigateTo('join_company')}
-        >
-          <Text style={styles.backLinkText}>Have a team invitation? Accept it here</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.backLink}
           onPress={() => void signOut()}
         >
           <Text style={styles.backLinkText}>Sign out</Text>

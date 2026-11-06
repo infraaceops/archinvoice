@@ -10,7 +10,7 @@ import { ProjectType } from '../../types';
 import { useToast } from '../../context/ToastContext';
 
 export const CreateProjectScreen: React.FC = () => {
-  const { createProject, navigateTo, members, tenant } = useTenant();
+  const { createProject, navigateTo, tenant } = useTenant();
   const { user } = useAuth();
   const { showToast } = useToast();
 
@@ -23,18 +23,7 @@ export const CreateProjectScreen: React.FC = () => {
   const [archRate, setArchRate] = useState('150');
   const [interiorRate, setInteriorRate] = useState('220');
   const [supervisionRate, setSupervisionRate] = useState('50');
-  const [assignedArchitects, setAssignedArchitects] = useState<string[]>([
-    user?.displayName || 'Ar. Lead',
-  ]);
   const [loading, setLoading] = useState(false);
-
-  const toggleArchitect = (name: string) => {
-    if (assignedArchitects.includes(name)) {
-      setAssignedArchitects(assignedArchitects.filter((a) => a !== name));
-    } else {
-      setAssignedArchitects([...assignedArchitects, name]);
-    }
-  };
 
   const handleCreate = async () => {
     if (!name.trim()) {
@@ -62,7 +51,7 @@ export const CreateProjectScreen: React.FC = () => {
         unit,
         clientName: clientName.trim(),
         location: location.trim(),
-        assignedArchitects,
+        assignedArchitects: user?.displayName ? [user.displayName] : [],
         rateCard: {
           architecture: parseFloat(archRate) || 0,
           interior: parseFloat(interiorRate) || 0,
@@ -197,26 +186,6 @@ export const CreateProjectScreen: React.FC = () => {
             />
           </View>
 
-          <Text style={styles.sectionHeader}>Assign Architects</Text>
-          <View style={styles.architectsChipsWrap}>
-            {members.map((m) => {
-              const isSelected = assignedArchitects.includes(m.displayName || m.email || '');
-              const nameToShow = m.displayName || m.email || 'Member';
-              return (
-                <TouchableOpacity
-                  key={m.uid}
-                  style={[styles.chip, isSelected && styles.chipActive]}
-                  onPress={() => toggleArchitect(nameToShow)}
-                >
-                  <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>
-                    {isSelected ? '✓ ' : '+ '}
-                    {nameToShow} ({m.role})
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
           <View style={styles.actionsWrap}>
             <Button
               title="Cancel"
@@ -338,32 +307,6 @@ const styles = StyleSheet.create({
   unitBtnTextActive: {
     color: '#0f172a',
     fontWeight: '700',
-  },
-  architectsChipsWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 24,
-  },
-  chip: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    backgroundColor: '#f1f5f9',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  chipActive: {
-    backgroundColor: '#0f172a',
-    borderColor: '#0f172a',
-  },
-  chipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#475569',
-  },
-  chipTextActive: {
-    color: '#ffffff',
   },
   actionsWrap: {
     flexDirection: 'row',

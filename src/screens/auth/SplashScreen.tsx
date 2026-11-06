@@ -12,7 +12,7 @@ export const SplashScreen: React.FC = () => {
       if (user && user.tenantId) {
         navigateTo('dashboard');
       } else if (user && !user.tenantId) {
-        navigateTo('onboarding');
+        navigateTo('create_company');
       } else {
         navigateTo('signin');
       }
@@ -25,7 +25,7 @@ export const SplashScreen: React.FC = () => {
         <Text style={styles.brandBadgeText}>AI</Text>
       </View>
       <Text style={styles.title}>ArchInvoice</Text>
-      <Text style={styles.subtitle}>Architecture & Interior Multi-Tenant SaaS</Text>
+      <Text style={styles.subtitle}>Projects and billing for architecture practices</Text>
       <ActivityIndicator size="large" color="#3b82f6" style={styles.loader} />
     </View>
   );

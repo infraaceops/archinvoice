@@ -4,19 +4,16 @@ import {
   doc,
   getDoc,
   getDocs,
-  query,
   serverTimestamp,
   setDoc,
   Timestamp,
   updateDoc,
-  where,
   writeBatch,
 } from 'firebase/firestore';
-import * as Crypto from 'expo-crypto';
 import { appConfig, buildApiUrl } from '../config/app';
 import { auth, db, functions, isFirebaseConfigured } from '../config/firebase';
 import { offlineStorage } from './offlineStorage';
-import { Category, CompanyRole, InviteDoc, InvoiceDoc, LineItem, MemberDoc, ProjectDoc, Role, TeamInvitationResult, TenantDoc } from '../types';
+import { Category, InvoiceDoc, LineItem, ProjectDoc, Role, TenantDoc } from '../types';
 
 const shouldUseRemoteApi = () => Boolean(appConfig.apiBaseUrl && appConfig.authProvider === 'cloudflare');
 
@@ -175,160 +172,6 @@ export const api = {
     });
     await batch.commit();
     return { tenantId: tenantRef.id, role: 'admin' };
-  },
-
-  async joinTenant(tenantId: string, inviteToken: string): Promise<{ tenantId: string; role: Role }> {
-    if (shouldUseRemoteApi()) {
-      return requestRemoteApi<{ tenantId: string; role: Role }>(`/api/tenants/${tenantId}/join`, {
-        method: 'POST',
-        body: JSON.stringify({ inviteToken }),
-      });
-    }
-    if (!isFirebaseConfigured) throw new Error('Firebase is not configured.');
-    const user = auth?.currentUser;
-    if (!user?.email || !user.emailVerified) {
-      throw new Error('Sign in with a verified Google email before accepting an invitation.');
-    }
-    const inviteId = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, inviteToken);
-    const inviteRef = doc(db, 'tenants', tenantId, 'invites', inviteId);
-    const inviteSnap = await getDoc(inviteRef);
-    if (!inviteSnap.exists()) throw new Error('Invitation link is invalid or has expired.');
-    const invite = inviteSnap.data();
-    if (invite.used || invite.expiresAt?.toDate?.() <= new Date()) {
-      throw new Error('This invitation has already been used or has expired.');
-    }
-    if (invite.email !== user.email.trim().toLowerCase()) {
-      throw new Error('Sign in with the Google email address this invitation was sent to.');
-    }
-    if (!['architect', 'viewer'].includes(invite.role)) {
-      throw new Error('This invitation has an invalid team role.');
-    }
-    const memberRef = doc(db, 'tenants', tenantId, 'members', user.uid);
-    const userRef = doc(db, 'users', user.uid);
-    const batch = writeBatch(db);
-    batch.update(inviteRef, { used: true, acceptedBy: user.uid, acceptedAt: serverTimestamp() });
-    batch.set(memberRef, {
-      uid: user.uid,
-      displayName: user.displayName || user.email,
-      email: user.email.trim().toLowerCase(),
-      phone: invite.phone || '',
-      role: invite.role,
-      invitedBy: invite.createdBy,
-      joinedAt: serverTimestamp(),
-      inviteId,
-    });
-    batch.set(userRef, {
-      uid: user.uid,
-      displayName: user.displayName || user.email,
-      email: user.email.trim().toLowerCase(),
-      photoUrl: user.photoURL || null,
-      tenantId,
-      role: invite.role,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-    await batch.commit();
-    return { tenantId, role: invite.role };
-  },
-
-  async createTeamInvitation(data: {
-    email: string;
-    phone?: string;
-    role: Exclude<CompanyRole, 'admin'>;
-  }): Promise<TeamInvitationResult> {
-    if (shouldUseRemoteApi()) {
-      return requestRemoteApi<TeamInvitationResult>('/api/invites', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      });
-    }
-    if (!isFirebaseConfigured) throw new Error('Firebase is not configured.');
-    const user = auth?.currentUser;
-    if (!user?.email || !user.emailVerified) throw new Error('Sign in with a verified Google email first.');
-    const userSnap = await getDoc(doc(db, 'users', user.uid));
-    const tenantId = userSnap.data()?.tenantId;
-    if (typeof tenantId !== 'string' || userSnap.data()?.role !== 'admin') {
-      throw new Error('Only a company admin can invite team members.');
-    }
-    const email = data.email.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Enter a valid email address.');
-    const token = Array.from(await Crypto.getRandomBytesAsync(32), (byte) => byte.toString(16).padStart(2, '0')).join('');
-    const inviteId = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, token);
-    const expiresAt = Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
-    const inviteRef = doc(db, 'tenants', tenantId, 'invites', inviteId);
-    await setDoc(inviteRef, {
-      tenantId,
-      email,
-      phone: data.phone?.trim() || '',
-      role: data.role,
-      createdBy: user.uid,
-      createdAt: serverTimestamp(),
-      expiresAt,
-      used: false,
-    });
-    return {
-      inviteToken: token,
-      expiresAt: expiresAt.toDate().toISOString(),
-      inviteLink: `archinvoice://join?tenantId=${tenantId}&token=${token}`,
-    };
-  },
-
-  async listTenantTeam(): Promise<{ members: MemberDoc[]; invitations: InviteDoc[] }> {
-    if (shouldUseRemoteApi()) {
-      return requestRemoteApi<{ members: MemberDoc[]; invitations: InviteDoc[] }>('/api/team');
-    }
-    if (!isFirebaseConfigured) throw new Error('Firebase is not configured.');
-    const user = auth?.currentUser;
-    if (!user) throw new Error('Sign in to view the company team.');
-    const userSnap = await getDoc(doc(db, 'users', user.uid));
-    const tenantId = userSnap.data()?.tenantId;
-    if (typeof tenantId !== 'string' || userSnap.data()?.role !== 'admin') {
-      throw new Error('Only a company admin can view the full team.');
-    }
-    const [memberSnaps, inviteSnaps] = await Promise.all([
-      getDocs(collection(db, 'tenants', tenantId, 'members')),
-      getDocs(query(collection(db, 'tenants', tenantId, 'invites'), where('used', '==', false))),
-    ]);
-    const members = memberSnaps.docs.map((snapshot) => ({
-      ...snapshot.data(),
-      uid: snapshot.id,
-      joinedAt: snapshot.data().joinedAt?.toDate?.().toISOString() || '',
-    })) as MemberDoc[];
-    const invitations = inviteSnaps.docs
-      .map((snapshot) => ({
-        ...snapshot.data(),
-        id: snapshot.id,
-        expiresAt: snapshot.data().expiresAt?.toDate?.().toISOString() || '',
-      }))
-      .filter((invite) => Date.parse(invite.expiresAt) > Date.now()) as InviteDoc[];
-    return { members, invitations };
-  },
-
-  async removeTeamMember(targetUid: string): Promise<void> {
-    if (shouldUseRemoteApi()) {
-      await requestRemoteApi<void>(`/api/team/${targetUid}`, { method: 'DELETE' });
-      return;
-    }
-    if (!isFirebaseConfigured) throw new Error('Firebase is not configured.');
-    const user = auth?.currentUser;
-    if (!user) throw new Error('Sign in to manage company members.');
-    const userSnap = await getDoc(doc(db, 'users', user.uid));
-    const tenantId = userSnap.data()?.tenantId;
-    if (typeof tenantId !== 'string' || userSnap.data()?.role !== 'admin') {
-      throw new Error('Only a company admin can remove team members.');
-    }
-    const targetMemberRef = doc(db, 'tenants', tenantId, 'members', targetUid);
-    const targetSnap = await getDoc(targetMemberRef);
-    if (!targetSnap.exists()) throw new Error('Team member not found.');
-    if (targetSnap.data().role === 'admin') throw new Error('Company admin accounts cannot be removed by this action.');
-    const batch = writeBatch(db);
-    batch.delete(targetMemberRef);
-    batch.update(doc(db, 'users', targetUid), {
-      tenantId: null,
-      role: null,
-      updatedAt: serverTimestamp(),
-    });
-    await batch.commit();
   },
 
   async loadTenant(tenantId: string): Promise<TenantDoc> {

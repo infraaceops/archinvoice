@@ -82,14 +82,14 @@ export const ProjectDetailScreen: React.FC = () => {
             </View>
           </View>
 
-          <View style={styles.workspaceBox}>
+          <View style={styles.projectReviewBox}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.boxTitle}>Project collaboration</Text>
-              <Text style={styles.workspaceId}>Project ID: {project.id}</Text>
+              <Text style={styles.boxTitle}>Project review</Text>
+              <Text style={styles.projectId}>Project ID: {project.id}</Text>
               <Text style={styles.mutedText}>Drawings, progress, comments and approvals</Text>
             </View>
             <Button
-              title="Open workspace"
+              title="Open project review"
               onPress={() => navigateTo('collaboration', { project })}
               size="sm"
             />
@@ -114,12 +114,6 @@ export const ProjectDetailScreen: React.FC = () => {
             </View>
           </View>}
 
-          {role !== 'client' && <View style={styles.architectsRow}>
-            <Text style={styles.architectsLabel}>Assigned Architects:</Text>
-            <Text style={styles.architectsVal}>
-              {project.assignedArchitects?.join(', ') || 'None'}
-            </Text>
-          </View>}
         </Card>
 
         {role === 'admin' && (
@@ -253,7 +247,7 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
     marginBottom: 16,
   },
-  workspaceBox: {
+  projectReviewBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
@@ -264,7 +258,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#bfdbfe',
   },
-  workspaceId: { fontSize: 12, color: '#1e3a8a', fontWeight: '700', marginTop: 2 },
+  projectId: { fontSize: 12, color: '#1e3a8a', fontWeight: '700', marginTop: 2 },
   mutedText: { fontSize: 11, color: '#64748b', marginTop: 4 },
   boxTitle: {
     fontSize: 11,
@@ -290,21 +284,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#0f172a',
     marginTop: 2,
-  },
-  architectsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  architectsLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748b',
-    marginRight: 6,
-  },
-  architectsVal: {
-    fontSize: 12,
-    color: '#0f172a',
-    fontWeight: '500',
   },
   invHeaderRow: {
     flexDirection: 'row',

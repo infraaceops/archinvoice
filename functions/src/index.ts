@@ -11,10 +11,6 @@ initializeApp();
 export {
   createTenant,
   archiveTenant,
-  joinTenant,
-  createTeamInvitation,
-  listTenantTeam,
-  removeTeamMember,
 } from './auth/tenant';
 export { deleteProject, deleteInvoice } from './projects/delete';
 export { allocateSerialAndCreateInvoice } from './counters/serial';

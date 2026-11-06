@@ -243,12 +243,6 @@ async function requireSession(request: Request, env: Env): Promise<SessionUser> 
   return user;
 }
 
-async function requireAdmin(request: Request, env: Env): Promise<SessionUser> {
-  const user = await requireSession(request, env);
-  if (!user.tenantId || user.role !== 'admin') throw new HttpError(403, 'Only a company admin can perform this action.');
-  return user;
-}
-
 async function startGoogleAuth(request: Request, env: Env): Promise<Response> {
   if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) throw new HttpError(503, 'Google sign-in is not configured on the API.');
   const state = randomToken();
@@ -436,110 +430,7 @@ async function routeApi(request: Request, env: Env, url: URL): Promise<Response>
     if (!row) throw new HttpError(404, 'Company record was not found.');
     return jsonResponse(request, env, tenantView(row));
   }
-  const joinMatch = path.match(/^\/api\/tenants\/([0-9a-f-]{36})\/join$/i);
-  if (joinMatch && method === 'POST') {
-    await assertMutationOrigin(request, env);
-    const user = await requireSession(request, env);
-    if (user.tenantId) throw new HttpError(409, 'Your account already belongs to a company.');
-    const body = await bodyObject(request);
-    if (typeof body.inviteToken !== 'string' || !/^[0-9a-f]{64}$/.test(body.inviteToken)) {
-      throw new HttpError(400, 'Invitation token is invalid.');
-    }
-    const inviteHash = await sha256(body.inviteToken);
-    const invite = await env.DB.prepare(
-      'SELECT id, email, phone, role FROM invites WHERE id = ? AND tenant_id = ? AND used_at IS NULL AND expires_at > ?',
-    ).bind(inviteHash, joinMatch[1], new Date().toISOString()).first<{ id: string; email: string; phone: string; role: 'architect' | 'viewer' }>();
-    if (!invite) throw new HttpError(404, 'Invitation link is invalid or has expired.');
-    if (invite.email.toLowerCase() !== user.email.toLowerCase()) {
-      throw new HttpError(403, 'Sign in with the email address this invitation was created for.');
-    }
-    const now = new Date().toISOString();
-    const results = await env.DB.batch([
-      env.DB.prepare('UPDATE invites SET used_at = ?, accepted_by = ? WHERE id = ? AND used_at IS NULL AND expires_at > ?')
-        .bind(now, user.uid, inviteHash, now),
-      env.DB.prepare('INSERT INTO memberships (tenant_id, user_id, role, phone, invited_by, joined_at) VALUES (?, ?, ?, ?, ?, ?)')
-        .bind(joinMatch[1], user.uid, invite.role, invite.phone, 'invitation', now),
-      env.DB.prepare('UPDATE users SET tenant_id = ?, role = ?, updated_at = ? WHERE id = ? AND tenant_id IS NULL')
-        .bind(joinMatch[1], invite.role, now, user.uid),
-    ]);
-    if (!results[0].meta.changes) throw new HttpError(409, 'This invitation has already been accepted.');
-    return jsonResponse(request, env, { tenantId: joinMatch[1], role: invite.role });
-  }
-  if (path === '/api/invites' && method === 'POST') {
-    await assertMutationOrigin(request, env);
-    const admin = await requireAdmin(request, env);
-    const body = await bodyObject(request);
-    if (!validEmail(body.email)) throw new HttpError(400, 'Enter a valid email address.');
-    const role = body.role;
-    if (role !== 'architect' && role !== 'viewer') throw new HttpError(400, 'Invitation role must be architect or viewer.');
-    const phone = typeof body.phone === 'string' ? body.phone.trim() : '';
-    if (phone.length > 40) throw new HttpError(400, 'Phone number must be 40 characters or fewer.');
-    if (body.email.toLowerCase() === admin.email.toLowerCase()) throw new HttpError(409, 'You cannot invite your own email address.');
-    const activeInvites = await env.DB.prepare(
-      'SELECT COUNT(*) AS count FROM invites WHERE tenant_id = ? AND used_at IS NULL AND expires_at > ?',
-    ).bind(admin.tenantId, new Date().toISOString()).first<{ count: number }>();
-    if ((activeInvites?.count || 0) >= 50) throw new HttpError(429, 'This company has reached the limit of 50 active invitations.');
-    const token = randomToken();
-    const inviteId = await sha256(token);
-    const now = new Date();
-    const expiry = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-    await env.DB.prepare(
-      'INSERT INTO invites (id, tenant_id, email, phone, role, created_by, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    ).bind(inviteId, admin.tenantId, body.email.toLowerCase(), phone, role, admin.uid, now.toISOString(), expiry.toISOString()).run();
-    const inviteLink = `${validAppOrigin(env)}/?invite=${token}&tenantId=${encodeURIComponent(admin.tenantId!)}`;
-    return jsonResponse(request, env, { inviteToken: token, inviteLink, expiresAt: expiry.toISOString() }, 201);
-  }
-  if (path === '/api/team' && method === 'GET') {
-    const admin = await requireAdmin(request, env);
-    const [membersResult, invitesResult] = await Promise.all([
-      env.DB.prepare(
-        `SELECT u.id AS uid, u.display_name AS displayName, u.email, m.phone, m.role, m.invited_by AS invitedBy, m.joined_at AS joinedAt
-         FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.tenant_id = ? ORDER BY m.joined_at`,
-      ).bind(admin.tenantId).all<MemberDocRow>(),
-      env.DB.prepare(
-        `SELECT id, tenant_id AS tenantId, email, phone, role, created_by AS createdBy, expires_at AS expiresAt, 0 AS used
-         FROM invites WHERE tenant_id = ? AND used_at IS NULL AND expires_at > ? ORDER BY created_at DESC`,
-      ).bind(admin.tenantId, new Date().toISOString()).all<InviteDocRow>(),
-    ]);
-    return jsonResponse(request, env, {
-      members: membersResult.results.map((row) => ({
-        uid: row.uid, displayName: row.displayName, email: row.email, phone: row.phone,
-        role: row.role, invitedBy: row.invitedBy, joinedAt: row.joinedAt, status: 'active',
-      })),
-      invitations: invitesResult.results.map((row) => ({
-        id: row.id, tenantId: row.tenantId, email: row.email, phone: row.phone, role: row.role,
-        createdBy: row.createdBy, expiresAt: row.expiresAt, used: Boolean(row.used),
-      })),
-    });
-  }
-  const memberMatch = path.match(/^\/api\/team\/([^/]+)$/);
-  if (memberMatch && method === 'DELETE') {
-    await assertMutationOrigin(request, env);
-    const admin = await requireAdmin(request, env);
-    const targetUid = decodeURIComponent(memberMatch[1]);
-    if (targetUid === admin.uid) throw new HttpError(400, 'The company owner cannot remove their own account.');
-    const target = await env.DB.prepare(
-      'SELECT role FROM memberships WHERE tenant_id = ? AND user_id = ?',
-    ).bind(admin.tenantId, targetUid).first<{ role: string }>();
-    if (!target) throw new HttpError(404, 'Team member was not found.');
-    if (target.role === 'admin') throw new HttpError(403, 'Company admin access cannot be removed through this action.');
-    await env.DB.batch([
-      env.DB.prepare('DELETE FROM memberships WHERE tenant_id = ? AND user_id = ?').bind(admin.tenantId, targetUid),
-      env.DB.prepare('UPDATE users SET tenant_id = NULL, role = NULL, updated_at = ? WHERE id = ? AND tenant_id = ?')
-        .bind(new Date().toISOString(), targetUid, admin.tenantId),
-    ]);
-    return jsonResponse(request, env, { success: true });
-  }
   return jsonResponse(request, env, { error: 'Not found.' }, 404);
-}
-
-interface MemberDocRow {
-  uid: string; displayName: string; email: string; phone: string; role: string; invitedBy: string; joinedAt: string;
-}
-
-interface InviteDocRow {
-  id: string; tenantId: string; email: string; phone: string; role: string;
-  createdBy: string; expiresAt: string; used: number;
 }
 
 export default {

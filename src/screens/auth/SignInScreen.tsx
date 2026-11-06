@@ -13,7 +13,7 @@ WebBrowser.maybeCompleteAuthSession();
 
 export const SignInScreen: React.FC = () => {
   const { signInWithGoogle, refreshUser } = useAuth();
-  const { navigateTo, currentParams } = useTenant();
+  const { navigateTo } = useTenant();
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
@@ -37,12 +37,6 @@ export const SignInScreen: React.FC = () => {
   const finishSignIn = async () => {
     const account = await refreshUser();
     if (account?.tenantId) navigateTo('dashboard');
-    else if (currentParams?.inviteToken) {
-      navigateTo('join_company', {
-        inviteToken: currentParams.inviteToken,
-        tenantId: currentParams.tenantId,
-      });
-    }
     else navigateTo('create_company');
   };
 
@@ -98,10 +92,7 @@ export const SignInScreen: React.FC = () => {
     setLoading(true);
     try {
       if (Platform.OS === 'web') {
-        const returnTo = currentParams?.inviteToken && currentParams?.tenantId
-          ? `/?invite=${encodeURIComponent(currentParams.inviteToken)}&tenantId=${encodeURIComponent(currentParams.tenantId)}`
-          : '/';
-        await signInWithGoogle(undefined, returnTo);
+        await signInWithGoogle();
         await finishSignIn();
         setLoading(false);
         return;
@@ -146,7 +137,7 @@ export const SignInScreen: React.FC = () => {
           </Text>
         )}
         <Text style={styles.notice}>
-          New Google accounts continue to the company setup page. Team invitations require signing in with the invited email.
+          After signing in, set up your company profile to start creating projects and invoices.
         </Text>
       </View>
     </ScrollView>

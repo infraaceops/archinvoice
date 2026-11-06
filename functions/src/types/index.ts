@@ -52,24 +52,6 @@ export interface TenantDoc {
   createdAt: Timestamp;
 }
 
-export interface MemberDoc {
-  role: Role;
-  invitedBy: string;
-  joinedAt: Timestamp;
-}
-
-export interface InviteDoc {
-  email: string;
-  phone: string;
-  role: Exclude<Role, 'admin'>;
-  createdBy: string;
-  createdAt: Timestamp;
-  expiresAt: Timestamp;
-  used: boolean;
-  acceptedBy?: string;
-  acceptedAt?: Timestamp;
-}
-
 export interface ProjectDoc {
   name: string;
   type: ProjectType;

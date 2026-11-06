@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { ActivityIndicator, Linking, Text, View, StyleSheet, useWindowDimensions, SafeAreaView } from 'react-native';
+import { ActivityIndicator, Text, View, StyleSheet, useWindowDimensions, SafeAreaView } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTenant } from '../context/TenantContext';
 
@@ -9,9 +9,7 @@ import { TabBar } from '../components/TabBar';
 // Screens
 import { SplashScreen } from '../screens/auth/SplashScreen';
 import { SignInScreen } from '../screens/auth/SignInScreen';
-import { OnboardingScreen } from '../screens/auth/OnboardingScreen';
 import { CreateCompanyScreen } from '../screens/auth/CreateCompanyScreen';
-import { JoinCompanyScreen } from '../screens/auth/JoinCompanyScreen';
 import { DashboardScreen } from '../screens/dashboard/DashboardScreen';
 import { ProjectListScreen } from '../screens/projects/ProjectListScreen';
 import { CreateProjectScreen } from '../screens/projects/CreateProjectScreen';
@@ -34,45 +32,16 @@ export const AppNavigator: React.FC = () => {
   const isAuthScreen =
     activeScreen === 'splash' ||
     activeScreen === 'signin' ||
-    activeScreen === 'onboarding' ||
-    activeScreen === 'create_company' ||
-    activeScreen === 'join_company';
+    activeScreen === 'create_company';
 
   useEffect(() => {
     if (loading) return;
     if (!user && !isAuthScreen) navigateTo('signin');
     else if (user?.role === 'client' && clientScreenBlocked) navigateTo('projects');
-    else if (user && !user.tenantId && activeScreen !== 'create_company' && activeScreen !== 'join_company') {
+    else if (user && !user.tenantId && activeScreen !== 'create_company') {
       navigateTo('create_company');
     } else if (user?.tenantId && isAuthScreen) navigateTo('dashboard');
   }, [activeScreen, clientScreenBlocked, isAuthScreen, loading, navigateTo, user]);
-
-  useEffect(() => {
-    const handleInviteUrl = (url: string | null) => {
-      if (!url) return;
-      try {
-        const parsed = new URL(url);
-        const inviteToken = parsed.searchParams.get('token');
-        const tenantId = parsed.searchParams.get('tenantId');
-        const isInvite =
-          parsed.hostname === 'join' ||
-          parsed.pathname === '/join' ||
-          (parsed.searchParams.has('token') && parsed.searchParams.has('tenantId')) ||
-          parsed.searchParams.has('invite');
-        if (!isInvite) return;
-        const token = inviteToken || parsed.searchParams.get('invite');
-        if (!token || !tenantId) return;
-        navigateTo(user ? 'join_company' : 'signin', { inviteToken: token, tenantId });
-      } catch (error) {
-        console.error('Could not parse invitation link.', error);
-      }
-    };
-    void Linking.getInitialURL().then(handleInviteUrl).catch((error: unknown) => {
-      console.error('Could not read the initial app link.', error);
-    });
-    const subscription = Linking.addEventListener('url', ({ url }) => handleInviteUrl(url));
-    return () => subscription.remove();
-  }, [navigateTo, user]);
 
   const isDesktop = width >= 768;
 
@@ -82,12 +51,8 @@ export const AppNavigator: React.FC = () => {
         return <SplashScreen />;
       case 'signin':
         return <SignInScreen />;
-      case 'onboarding':
-        return <OnboardingScreen />;
       case 'create_company':
         return <CreateCompanyScreen />;
-      case 'join_company':
-        return <JoinCompanyScreen />;
       case 'dashboard':
         return <DashboardScreen />;
       case 'projects':

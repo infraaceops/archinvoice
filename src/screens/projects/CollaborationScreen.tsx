@@ -80,7 +80,7 @@ export const CollaborationScreen: React.FC = () => {
   if (!project || !user) {
     return (
       <View style={styles.container}>
-        <Header title="Project collaboration" showBack onBack={() => navigateTo('projects')} />
+        <Header title="Project review" showBack onBack={() => navigateTo('projects')} />
         <Text style={styles.errorText}>Project not found or user session is unavailable.</Text>
       </View>
     );

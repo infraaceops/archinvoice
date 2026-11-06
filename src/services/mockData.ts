@@ -1,4 +1,4 @@
-import { TenantDoc, ProjectDoc, InvoiceDoc, MemberDoc, UserDoc } from '../types';
+import { TenantDoc, ProjectDoc, InvoiceDoc, UserDoc } from '../types';
 
 export const MOCK_USER: UserDoc = {
   uid: 'user-shadab-001',
@@ -53,33 +53,6 @@ export const MOCK_TENANT: TenantDoc = {
   },
   createdAt: '2025-01-15T08:00:00Z',
 };
-
-export const MOCK_MEMBERS: MemberDoc[] = [
-  {
-    uid: 'user-shadab-001',
-    displayName: 'Ar. Shadab Khan',
-    email: 'shadab@archstudio.com',
-    role: 'admin',
-    invitedBy: 'self',
-    joinedAt: '2025-01-15T08:00:00Z',
-  },
-  {
-    uid: 'user-zain-002',
-    displayName: 'Zainab Ahmed',
-    email: 'zainab@archstudio.com',
-    role: 'architect',
-    invitedBy: 'user-shadab-001',
-    joinedAt: '2025-02-10T11:00:00Z',
-  },
-  {
-    uid: 'user-bilal-003',
-    displayName: 'Bilal Farooq',
-    email: 'bilal@archstudio.com',
-    role: 'viewer',
-    invitedBy: 'user-shadab-001',
-    joinedAt: '2025-03-01T09:30:00Z',
-  },
-];
 
 export const MOCK_PROJECTS: ProjectDoc[] = [
   {

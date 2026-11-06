@@ -1,5 +1,4 @@
 export type Role = 'admin' | 'architect' | 'viewer' | 'client';
-export type CompanyRole = Exclude<Role, 'client'>;
 export type Category = 'architecture' | 'interior' | 'supervision';
 export type ProjectType = 'residential' | 'commercial';
 export type InvoiceStatus = 'draft' | 'issued' | 'paid' | 'cancelled';
@@ -53,34 +52,6 @@ export interface TenantDoc {
     };
   };
   createdAt: string;
-}
-
-export interface MemberDoc {
-  uid: string;
-  displayName?: string;
-  email?: string;
-  phone?: string;
-  role: CompanyRole;
-  invitedBy: string;
-  joinedAt: string;
-  status?: 'active' | 'invited';
-}
-
-export interface InviteDoc {
-  id: string;
-  tenantId: string;
-  email: string;
-  phone?: string;
-  role: Exclude<CompanyRole, 'admin'>;
-  createdBy: string;
-  expiresAt: string;
-  used: boolean;
-}
-
-export interface TeamInvitationResult {
-  inviteToken: string;
-  inviteLink: string;
-  expiresAt: string;
 }
 
 export interface ProjectDoc {

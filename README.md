@@ -1,7 +1,7 @@
-# 🏛️ ArchInvoice — Portable Native Multi-Tenant SaaS App
-### Unified Single Codebase for Web, Android, and iOS
+# 🏛️ ArchInvoice — Projects & Billing for Architecture Practices
+### One Codebase for Web, Android, and iOS
 
-ArchInvoice is an Architecture & Interior Invoice Generation multi-tenant SaaS application built on a **single, portable native TypeScript codebase** powered by React Native and Expo, with Firebase Cloud Functions and Firestore backend.
+ArchInvoice helps architecture and interior practices manage projects and generate client invoices from one portable TypeScript app built with React Native and Expo.
 
 ---
 
@@ -41,7 +41,7 @@ invoice-generator/
 │   │   ├── counters/serial.ts    # §7.3 Atomic serial & invoice creation
 │   │   ├── invoices/issue.ts     # §7.4 & §7.5 PDF generation & signed URLs
 │   │   ├── pdf/template.ts       # §9 Handlebars HTML PDF template with visual seal
-│   │   ├── auth/tenant.ts        # §7.1 & §7.2 createTenant and joinTenant
+│   │   ├── auth/tenant.ts        # Company setup and archival
 │   │   ├── billing/play.ts       # §7.6 & §10 Google Play RTDN & purchase verification
 │   │   ├── metering/cron.ts      # §7.7 & §7.8 Daily metering & grace period enforcer
 │   │   └── index.ts              # Function exports
@@ -52,12 +52,12 @@ invoice-generator/
 │   ├── context/                  # AuthContext, TenantContext, ToastContext
 │   ├── navigation/               # AppNavigator (responsive Web sidebar + Mobile tab bar)
 │   ├── screens/
-│   │   ├── auth/                 # Splash, SignIn, Onboarding, CreateCompany, JoinCompany
+│   │   ├── auth/                 # Splash, SignIn, CreateCompany
 │   │   ├── dashboard/            # Dashboard (Storage bar, Egress meter, KPIs, Quick actions)
 │   │   ├── projects/             # ProjectList, CreateProject, ProjectDetail
 │   │   ├── invoices/             # CreateInvoice, InvoicePreview, PdfViewer, InvoiceHistory
 │   │   ├── billing/              # Billing & Storage packs (1GB @ PKR 100, 5GB @ PKR 450)
-│   │   └── settings/             # Settings (Firm profile, Prefixes, Invite code generator)
+│   │   └── settings/             # Settings (Firm profile and invoice prefixes)
 │   ├── services/                 # Universal API, offlineStorage, PDF generator, mockData
 │   ├── types/                    # Canonical TypeScript interfaces matching Firestore schema
 │   └── util/                     # PKR currency formatting, dates, tax & area calculations
@@ -123,7 +123,7 @@ Output:
 
 1. **Atomic Serial Number Allocation (§7.3)**:
    - Consecutive, gap-free format: `{PREFIX}-{FY}-{0001}` (e.g. `ARCH-2025-0001`, `INT-2025-0001`, `SUP-2025-0001`).
-   - Transactional isolation prevents race conditions when multiple architects issue invoices simultaneously.
+   - Transactional isolation prevents invoice serial collisions during simultaneous billing.
 
 2. **Universal PDF Engine (§9)**:
    - **Web**: Instant printable preview, HTML5 canvas rendering, direct PDF download.
@@ -131,11 +131,10 @@ Output:
    - Company branding, CEO signature line, and official visual seal watermark with disclaimer:
      > *"This seal is a company visual mark, not a certified digital signature."*
 
-3. **Multi-Role Access Control (§4)**:
-   - **Admin**: Company profile management, member invites, pricing settings, and invoice creation.
-   - **Architect**: Project creation, rate card configuration, and invoice issuance.
-   - **Viewer**: Read-only access; restricted from creating or issuing invoices.
-   - User roles and company membership are guarded by Firebase Authentication and Firestore security rules; there is no client-side role switcher.
+3. **Company Profile and Billing**:
+   - Set up your practice profile, legal signatory, and invoice numbering.
+   - Create projects, configure rate cards, and generate invoices and PDFs.
+   - Company records remain isolated by account and protected by Firebase security rules.
 
 4. **Resource Quotas & Google Play Billing (§10)**:
    - Base Subscription: PKR 280/mo (Includes 1 GB storage, 3 GB egress).
@@ -156,30 +155,19 @@ Output:
    Auth, callable status-transition functions, server-side quota enforcement, and
    malware scanning must be connected before using this workflow with real clients.
 
-## 🔐 Google Sign-In, Company Setup, and Team Access
+## 🔐 Google Sign-In and Company Setup
 
 The app uses Firebase Authentication with Google as the provider. A signed-in
-Google account without a company is directed to company setup. Company creation,
-team invitations, invitation acceptance, and member removal are performed
-directly through Firestore atomic writes protected by Firestore security rules;
-these operations do not require Cloud Functions. Invitations are bound to a
-verified email address, expire after seven days, and use a one-time random
-token whose SHA-256 hash is stored in the company invitation record. The admin
-shares the generated link; the app does not send invitation emails
-automatically. Team members must sign in with the invited Google email.
-Removing a member revokes their company membership but does not delete their
-Firebase Authentication account.
+Google account without a company profile is directed to company setup. Each
+account creates its own company profile for invoice branding and numbering;
+projects and invoices remain scoped to that company in Firestore. Team
+invitations, join links, and team management have been removed. Existing
+memberships and records are not deleted automatically; existing members may
+retain access until the company is archived.
 
-On the Firebase backend, projects and invoices are stored in the signed-in
-member's company Firestore collections, and company/project/invoice reads are
-authorized by company membership rules. The local offline cache is keyed by
-company ID; accounts without a company membership start with no company data.
-Company settings and project/invoice changes are shared with invited teammates
-after they accept an invitation using the invited Google email.
-
-Company admins can archive the company after typing its exact name. Archiving
-preserves its Firestore records and generated PDFs, revokes active member
-profiles, and blocks further company access; Google accounts remain active.
+The company can be archived after typing its exact name. Archiving preserves
+its Firestore records and generated PDFs, revokes active member profiles, and
+blocks further company access; Google accounts remain active.
 Admins can also permanently delete projects (including their invoices and PDFs)
 or individual invoices (including issued invoices and their PDFs). On Firebase,
 these deletions are performed by Firebase Functions rather than direct client
@@ -202,23 +190,20 @@ not available in that mode.
    the client bundle; they are identifiers, not server secrets. Never put
    service-account keys or other private credentials in `.env` or client code.
 4. Configure the Firebase CLI for the same project with `firebase use --add`.
-   Review and deploy the Firestore security rules:
+   Deploy the Firestore rules and Firebase Functions:
 
    ```bash
-   firebase deploy --only firestore:rules
+   firebase deploy --only functions,firestore:rules
    ```
 
-   Company setup and team management do not need Cloud Functions or a Storage
-   bucket. Do not deploy Functions or Storage unless you intentionally enable
-   the invoice PDF/cloud-storage features and understand their billing needs.
+   Invoice PDF/cloud-storage features require the configured Firebase bucket
+   and may have billing costs.
 
 5. Run `npm run build:web` for the web client. For iOS and Android, build and
    test signed development builds with the configured OAuth client IDs and
    registered bundle/package identifiers; Expo Go is not a production OAuth
-   test. The app scheme `archinvoice://` handles native invitation links when
-   the app is installed. A verified web/universal-link domain and the
-   associated iOS/Android asset files still need to be configured before
-   distributing links that should open the app from any browser.
+   test. Project-level client invitations remain part of the drawing review
+   flow.
 
 ### Sign-in and company-setup troubleshooting
 
@@ -245,12 +230,11 @@ not available in that mode.
   Avoid deploying or using those features if you cannot accept possible
   charges.
 - Enable Firestore and create its default database. Deploy the current
-  Firestore rules to the same Firebase project used by the app. These rules
-  must be deployed before company creation, invitations, or membership changes
-  will work.
+  Firestore rules to the same Firebase project used by the app before company
+  setup and project/invoice use.
 - After editing `.env`, stop Expo and restart with `npx expo start -c`; a web
   deployment must be rebuilt and redeployed to pick up environment changes.
-- If company setup or team operations fail after deploying rules, check the
+- If company setup fails after deploying rules, check the
   browser console and Firebase Console → **Firestore → Rules** for the latest
   deployed rules/errors. Check whether a company was created in Firestore
   before retrying. Do not share `.env` contents, OAuth client secrets,
@@ -258,12 +242,12 @@ not available in that mode.
 
 ## ☁️ Optional Cloudflare Web API (free-tier deployment)
 
-The web app can use a Cloudflare Worker and D1 for Google sign-in, company
-creation, and team invitations/removal instead of Firebase Auth/Firestore.
+The web app can use a Cloudflare Worker and D1 for Google sign-in and company
+creation instead of Firebase Auth/Firestore.
 The current Worker implementation supports these identity and company
 operations only. Project, invoice, drawing-review, and document data remain
 local/offline in the current app and are **not** synchronized to D1 or Google
-Drive. Do not use the local-only records as a shared production workspace.
+Drive. Do not rely on local-only records for shared project review.
 Paid subscriptions, storage packs, and invoice PDF generation are disabled in
 this Cloudflare path; requests for purchases are rejected rather than simulated.
 Cloudflare free-plan allowances and availability can change; review the current
@@ -330,23 +314,23 @@ The recommended domains are:
    `infraaceops.com` domain family for the browser's secure session cookie to
    work reliably; the default `*.github.io` origin is not supported.
 
-The GitHub workflow validates the frontend, Worker, and existing Firebase
-Functions code; it no longer deploys Firebase Functions or Firebase rules.
-Deploy Worker changes manually with `cd worker; npm run deploy` after applying
-the D1 migration. This avoids silently deploying the legacy Firebase backend
-or requiring a Firebase service-account key in GitHub Actions.
+The GitHub workflow validates the frontend, Worker, and Firebase Functions
+code, and publishes the web app on pushes to `main`. It does not deploy Firebase
+or Cloudflare services. Deploy Worker changes manually with `cd worker; npm run
+deploy`; this feature removal needs no D1 migration. Deploy Firebase Functions
+and Firestore rules separately when using the Firebase backend.
 
 The Worker validates Google ID-token signatures and OIDC claims, uses OAuth
 state, nonce, and PKCE, and issues a random opaque, HttpOnly, Secure,
-SameSite=Lax session cookie. D1 stores only a hash of the session token and
-one-time invite token. Mutating API requests require the exact configured
-frontend `Origin`. The Worker has no email delivery integration: admins share
-the one-time invitation link themselves. Company logos/seals are currently
+SameSite=Lax session cookie. D1 stores only a hash of the session token.
+Mutating API requests require the exact configured frontend `Origin`.
+Company logos/seals are currently
 limited to small inline images; no R2 uploads are implemented.
-Before inviting real users, configure Cloudflare rate-limiting/WAF rules for
-the OAuth start and callback endpoints and monitor D1/Worker usage. The Worker
-does not yet implement automated email delivery, MFA, audit exports, or
-workspace/project/invoice data synchronization.
+Before using Google sign-in with real users, configure Cloudflare
+rate-limiting/WAF rules for the OAuth start and callback endpoints and monitor
+D1/Worker usage. The Worker
+does not yet implement MFA, audit exports, or project/invoice data
+synchronization.
 
 ### Production readiness limits
 
@@ -359,7 +343,7 @@ workspace/project/invoice data synchronization.
 - Project drawing collaboration remains local/offline, as described above.
   Most project and invoice flows also retain existing demo/local behavior and
   must be migrated and security-tested before treating the whole product as a
-  production multi-tenant SaaS.
+  production project and billing service.
 ut7tyutft9uyoihk/.
 
  mlnk jhfhjn k\]
