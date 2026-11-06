@@ -14,7 +14,6 @@ export const Sidebar: React.FC = () => {
     { screen: 'settings', label: 'Company Settings', icon: '⚙️' },
   ];
   const clientNavItems: Array<{ screen: ScreenName; label: string; icon: string }> = [
-    { screen: 'projects', label: 'Projects', icon: '📐' },
     { screen: 'profile', label: 'Profile', icon: '👤' },
   ];
   const navItems = role === 'client' ? clientNavItems : firmNavItems;

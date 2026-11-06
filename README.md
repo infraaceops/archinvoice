@@ -141,20 +141,6 @@ Output:
    - Storage Packs: 1 GB pack (PKR 100), 5 GB pack (PKR 450 with 10% discount).
    - Egress hard cap: 10 GB/month with auto-throttle protection.
 
-5. **Project Drawing Review (MVP demo)**:
-   - Project-level client invitations and a restricted client navigation surface.
-   - Drawing sets, revision history, review status, threaded comments/objections,
-     objection resolution, client approval, and an in-app notification inbox.
-   - File selection supports PDF, DWG, JPG, and PNG, with per-file and drawing-set
-     size limits; opening a revision records the client-seen timestamp.
-
-   **Current limitation:** this collaboration workflow follows the app's existing
-   mock/offline architecture. Records are stored locally (browser localStorage on
-   web; in-memory for the current native-app session). It does not yet upload files
-   to Firebase Storage or deliver cross-device push/email notifications. Firebase
-   Auth, callable status-transition functions, server-side quota enforcement, and
-   malware scanning must be connected before using this workflow with real clients.
-
 ## 🔐 Google Sign-In and Company Setup
 
 The app uses Firebase Authentication with Google as the provider. A signed-in
@@ -202,8 +188,7 @@ not available in that mode.
 5. Run `npm run build:web` for the web client. For iOS and Android, build and
    test signed development builds with the configured OAuth client IDs and
    registered bundle/package identifiers; Expo Go is not a production OAuth
-   test. Project-level client invitations remain part of the drawing review
-   flow.
+   test.
 
 ### Sign-in and company-setup troubleshooting
 
@@ -245,9 +230,9 @@ not available in that mode.
 The web app can use a Cloudflare Worker and D1 for Google sign-in and company
 creation instead of Firebase Auth/Firestore.
 The current Worker implementation supports these identity and company
-operations only. Project, invoice, drawing-review, and document data remain
-local/offline in the current app and are **not** synchronized to D1 or Google
-Drive. Do not rely on local-only records for shared project review.
+operations only. Project, invoice, and document data remain local/offline in
+the current app and are **not** synchronized to D1 or Google Drive. Do not rely
+on local-only records for shared project or billing workflows.
 Paid subscriptions, storage packs, and invoice PDF generation are disabled in
 this Cloudflare path; requests for purchases are rejected rather than simulated.
 Cloudflare free-plan allowances and availability can change; review the current
@@ -340,8 +325,7 @@ synchronization.
 - Firebase App Check, production OAuth credentials, project deployment,
   multi-platform sign-in tests, and Firestore/Storage emulator security tests
   are not configured in this repository.
-- Project drawing collaboration remains local/offline, as described above.
-  Most project and invoice flows also retain existing demo/local behavior and
+- Most project and invoice flows retain existing demo/local behavior and
   must be migrated and security-tested before treating the whole product as a
   production project and billing service.
 ut7tyutft9uyoihk/.

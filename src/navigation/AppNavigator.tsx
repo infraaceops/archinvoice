@@ -14,8 +14,6 @@ import { DashboardScreen } from '../screens/dashboard/DashboardScreen';
 import { ProjectListScreen } from '../screens/projects/ProjectListScreen';
 import { CreateProjectScreen } from '../screens/projects/CreateProjectScreen';
 import { ProjectDetailScreen } from '../screens/projects/ProjectDetailScreen';
-import { CollaborationScreen } from '../screens/projects/CollaborationScreen';
-import { NotificationsScreen } from '../screens/projects/NotificationsScreen';
 import { CreateInvoiceScreen } from '../screens/invoices/CreateInvoiceScreen';
 import { InvoicePreviewScreen } from '../screens/invoices/InvoicePreviewScreen';
 import { PdfViewerScreen } from '../screens/invoices/PdfViewerScreen';
@@ -27,7 +25,7 @@ export const AppNavigator: React.FC = () => {
   const { width } = useWindowDimensions();
   const { user, role, loading } = useAuth();
   const { activeScreen, navigateTo } = useTenant();
-  const clientScreens = ['projects', 'project_detail', 'collaboration', 'notifications', 'profile'];
+  const clientScreens = ['profile'];
   const clientScreenBlocked = role === 'client' && !clientScreens.includes(activeScreen);
   const isAuthScreen =
     activeScreen === 'splash' ||
@@ -37,7 +35,7 @@ export const AppNavigator: React.FC = () => {
   useEffect(() => {
     if (loading) return;
     if (!user && !isAuthScreen) navigateTo('signin');
-    else if (user?.role === 'client' && clientScreenBlocked) navigateTo('projects');
+    else if (user?.role === 'client' && clientScreenBlocked) navigateTo('profile');
     else if (user && !user.tenantId && activeScreen !== 'create_company') {
       navigateTo('create_company');
     } else if (user?.tenantId && isAuthScreen) navigateTo('dashboard');
@@ -61,10 +59,6 @@ export const AppNavigator: React.FC = () => {
         return <CreateProjectScreen />;
       case 'project_detail':
         return <ProjectDetailScreen />;
-      case 'collaboration':
-        return <CollaborationScreen />;
-      case 'notifications':
-        return <NotificationsScreen />;
       case 'create_invoice':
         return <CreateInvoiceScreen />;
       case 'invoice_preview':
@@ -103,7 +97,7 @@ export const AppNavigator: React.FC = () => {
         {isDesktop && <Sidebar />}
 
         <View style={styles.contentArea}>
-          {clientScreenBlocked ? <ProjectListScreen /> : renderScreen()}
+          {clientScreenBlocked ? <ProfileScreen /> : renderScreen()}
           {!isDesktop && <TabBar />}
         </View>
       </View>

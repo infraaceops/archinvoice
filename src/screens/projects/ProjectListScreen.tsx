@@ -7,20 +7,16 @@ import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { ProjectDoc } from '../../types';
 import { useAuth } from '../../context/AuthContext';
-import { collaboration } from '../../services/collaboration';
 
 export const ProjectListScreen: React.FC = () => {
   const { projects, navigateTo } = useTenant();
-  const { user, role } = useAuth();
+  const { role } = useAuth();
+  const canCreateProjects = role === 'admin' || role === 'architect';
 
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'archived'>('active');
   const [search, setSearch] = useState('');
-  const visibleProjects =
-    role === 'client' && user
-      ? projects.filter((project) => collaboration.getClientProjectIds(user.email).includes(project.id))
-      : projects;
 
-  const filteredProjects = visibleProjects.filter((p) => {
+  const filteredProjects = projects.filter((p) => {
     const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
     const matchesSearch =
       p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -33,8 +29,8 @@ export const ProjectListScreen: React.FC = () => {
     <View style={styles.container}>
       <Header
         title="Projects"
-        subtitle={role === 'client' ? 'Your assigned project reviews' : `${visibleProjects.length} architectural & interior commissions`}
-        rightAction={role !== 'client' ? (
+        subtitle={`${projects.length} architectural & interior commissions`}
+        rightAction={canCreateProjects ? (
           <Button
             title="+ New Project"
             onPress={() => navigateTo('create_project')}
@@ -104,7 +100,7 @@ export const ProjectListScreen: React.FC = () => {
               )}
 
               {/* Rate Card per Category */}
-              {role !== 'client' && <View style={styles.rateCardBox}>
+              <View style={styles.rateCardBox}>
                 <Text style={styles.rateCardTitle}>Rate Card (PKR / {project.unit}):</Text>
                 <View style={styles.ratesRow}>
                   <View style={styles.rateCol}>
@@ -120,7 +116,7 @@ export const ProjectListScreen: React.FC = () => {
                     <Text style={styles.rateVal}>PKR {project.rateCard?.supervision || 0}</Text>
                   </View>
                 </View>
-              </View>}
+              </View>
 
               {/* Architects & Actions */}
               <View style={styles.cardFooter}>
@@ -131,12 +127,14 @@ export const ProjectListScreen: React.FC = () => {
                   >
                     <Text style={styles.actionBtnText}>View Details</Text>
                   </TouchableOpacity>
-                  {role !== 'client' && <TouchableOpacity
-                    style={styles.actionBtnSolid}
-                    onPress={() => navigateTo('create_invoice', { selectedProject: project })}
-                  >
-                    <Text style={styles.actionBtnSolidText}>Bill Project</Text>
-                  </TouchableOpacity>}
+                  {canCreateProjects && (
+                    <TouchableOpacity
+                      style={styles.actionBtnSolid}
+                      onPress={() => navigateTo('create_invoice', { selectedProject: project })}
+                    >
+                      <Text style={styles.actionBtnSolidText}>Bill Project</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
             </Card>

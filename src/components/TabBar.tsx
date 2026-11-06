@@ -8,7 +8,6 @@ export const TabBar: React.FC = () => {
   const { role } = useAuth();
 
   const clientTabs: Array<{ screen: ScreenName; label: string; icon: string }> = [
-    { screen: 'projects', label: 'Projects', icon: '📐' },
     { screen: 'profile', label: 'Profile', icon: '👤' },
   ];
   const firmTabs: Array<{ screen: ScreenName; label: string; icon: string }> = [

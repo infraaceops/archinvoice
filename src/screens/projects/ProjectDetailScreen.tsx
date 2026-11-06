@@ -14,6 +14,7 @@ import { useToast } from '../../context/ToastContext';
 export const ProjectDetailScreen: React.FC = () => {
   const { currentParams, invoices, navigateTo, deleteProject } = useTenant();
   const { role } = useAuth();
+  const canCreateInvoices = role === 'admin' || role === 'architect';
   const { showToast } = useToast();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -56,7 +57,7 @@ export const ProjectDetailScreen: React.FC = () => {
         subtitle={`${project.type.toUpperCase()} • ${project.area.toLocaleString()} ${project.unit}`}
         showBack
         onBack={() => navigateTo('projects')}
-        rightAction={role !== 'client' ? (
+        rightAction={canCreateInvoices ? (
           <Button
             title="+ Bill Project"
             onPress={() => navigateTo('create_invoice', { selectedProject: project })}
@@ -82,21 +83,8 @@ export const ProjectDetailScreen: React.FC = () => {
             </View>
           </View>
 
-          <View style={styles.projectReviewBox}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.boxTitle}>Project review</Text>
-              <Text style={styles.projectId}>Project ID: {project.id}</Text>
-              <Text style={styles.mutedText}>Drawings, progress, comments and approvals</Text>
-            </View>
-            <Button
-              title="Open project review"
-              onPress={() => navigateTo('collaboration', { project })}
-              size="sm"
-            />
-          </View>
-
           {/* Rate Cards Box */}
-          {role !== 'client' && <View style={styles.rateCardBox}>
+          <View style={styles.rateCardBox}>
             <Text style={styles.boxTitle}>Configured Rate Card (PKR / {project.unit})</Text>
             <View style={styles.ratesGrid}>
               <View style={styles.rateCardItem}>
@@ -112,7 +100,7 @@ export const ProjectDetailScreen: React.FC = () => {
                 <Text style={styles.rateValue}>PKR {project.rateCard?.supervision || 0}</Text>
               </View>
             </View>
-          </View>}
+          </View>
 
         </Card>
 
@@ -153,17 +141,19 @@ export const ProjectDetailScreen: React.FC = () => {
         )}
 
         {/* Project Invoices Section */}
-        {role !== 'client' && <Card>
+        <Card>
           <View style={styles.invHeaderRow}>
             <View>
               <Text style={styles.sectionTitle}>Commission Invoices ({projectInvoices.length})</Text>
               <Text style={styles.sectionSub}>Total Invoiced: {formatPKR(totalInvoiced)}</Text>
             </View>
-            <Button
-              title="Issue New Invoice"
-              onPress={() => navigateTo('create_invoice', { selectedProject: project })}
-              size="sm"
-            />
+            {canCreateInvoices && (
+              <Button
+                title="Issue New Invoice"
+                onPress={() => navigateTo('create_invoice', { selectedProject: project })}
+                size="sm"
+              />
+            )}
           </View>
 
           {projectInvoices.map((inv) => (
@@ -195,7 +185,7 @@ export const ProjectDetailScreen: React.FC = () => {
               <Text style={styles.emptyInvoicesText}>No invoices issued for this project yet.</Text>
             </View>
           )}
-        </Card>}
+        </Card>
       </ScrollView>
     </View>
   );
@@ -247,19 +237,6 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
     marginBottom: 16,
   },
-  projectReviewBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#eff6ff',
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#bfdbfe',
-  },
-  projectId: { fontSize: 12, color: '#1e3a8a', fontWeight: '700', marginTop: 2 },
-  mutedText: { fontSize: 11, color: '#64748b', marginTop: 4 },
   boxTitle: {
     fontSize: 11,
     fontWeight: '700',

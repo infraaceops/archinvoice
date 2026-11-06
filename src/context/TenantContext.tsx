@@ -2,7 +2,6 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { Category, InvoiceDoc, LineItem, ProjectDoc, Role, TenantDoc } from '../types';
 import { emptyTenant, offlineStorage } from '../services/offlineStorage';
 import { api } from '../services/api';
-import { collaboration } from '../services/collaboration';
 import { useToast } from './ToastContext';
 import { useAuth } from './AuthContext';
 
@@ -14,8 +13,6 @@ export type ScreenName =
   | 'projects'
   | 'create_project'
   | 'project_detail'
-  | 'collaboration'
-  | 'notifications'
   | 'profile'
   | 'create_invoice'
   | 'invoice_preview'
@@ -188,7 +185,6 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     await api.deleteProject(tenant.id, projectId);
     setProjects((current) => current.filter((project) => project.id !== projectId));
     setInvoices((current) => current.filter((invoice) => invoice.projectId !== projectId));
-    collaboration.deleteProjectData(projectId);
     showToast('Project and its invoices were deleted.', { type: 'success' });
   };
 
