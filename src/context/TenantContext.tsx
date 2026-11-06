@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { Category, InviteDoc, InvoiceDoc, LineItem, MemberDoc, ProjectDoc, Role, TeamInvitationResult, TenantDoc } from '../types';
 import { emptyTenant, offlineStorage } from '../services/offlineStorage';
 import { api } from '../services/api';
+import { collaboration } from '../services/collaboration';
 import { useToast } from './ToastContext';
 import { useAuth } from './AuthContext';
 
@@ -38,6 +39,7 @@ interface TenantContextType {
   inviteTeamMember: (data: { email: string; phone?: string; role: 'architect' | 'viewer' }) => Promise<TeamInvitationResult>;
   removeTeamMember: (uid: string) => Promise<void>;
   createProject: (data: Omit<ProjectDoc, 'id' | 'createdAt'>) => Promise<ProjectDoc>;
+  deleteProject: (projectId: string) => Promise<void>;
   createInvoice: (params: {
     projectId: string;
     category: Category;
@@ -47,9 +49,11 @@ interface TenantContextType {
   }) => Promise<InvoiceDoc>;
   issueInvoice: (invoiceId: string) => Promise<InvoiceDoc>;
   updateInvoiceStatus: (invoiceId: string, status: InvoiceDoc['status']) => Promise<void>;
+  deleteInvoice: (invoiceId: string) => Promise<void>;
   buyStoragePack: (productId: 'storage_pack_1gb' | 'storage_pack_5gb') => Promise<void>;
   renewSubscription: () => Promise<void>;
   updateTenant: (updates: Partial<TenantDoc>) => Promise<void>;
+  archiveTenant: (confirmationName: string) => Promise<void>;
 }
 
 const TenantContext = createContext<TenantContextType | undefined>(undefined);
@@ -70,7 +74,7 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [currentParams, setCurrentParams] = useState<any>(null);
 
   const { showToast } = useToast();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const previousUserId = useRef<string | null>(null);
 
   useEffect(() => {
@@ -219,6 +223,17 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     return newProj;
   };
 
+  const deleteProject = async (projectId: string): Promise<void> => {
+    if (!user?.tenantId || user.tenantId !== tenant.id || user.role !== 'admin') {
+      throw new Error('Only a company admin can delete projects.');
+    }
+    await api.deleteProject(tenant.id, projectId);
+    setProjects((current) => current.filter((project) => project.id !== projectId));
+    setInvoices((current) => current.filter((invoice) => invoice.projectId !== projectId));
+    collaboration.deleteProjectData(projectId);
+    showToast('Project and its invoices were deleted.', { type: 'success' });
+  };
+
   const createInvoice = async (params: {
     projectId: string;
     category: Category;
@@ -269,6 +284,15 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     showToast(`Invoice marked as ${status.toUpperCase()}`, { type: 'info' });
   };
 
+  const deleteInvoice = async (invoiceId: string): Promise<void> => {
+    if (!user?.tenantId || user.tenantId !== tenant.id || user.role !== 'admin') {
+      throw new Error('Only a company admin can delete invoices.');
+    }
+    await api.deleteInvoice(tenant.id, invoiceId);
+    setInvoices((current) => current.filter((invoice) => invoice.id !== invoiceId));
+    showToast('Invoice and its PDF were deleted.', { type: 'success' });
+  };
+
   const buyStoragePack = async (productId: 'storage_pack_1gb' | 'storage_pack_5gb') => {
     const purchaseToken = `token_${Date.now()}`;
     const res = await api.verifyPurchase(tenant.id, productId, purchaseToken);
@@ -291,6 +315,24 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setTenant(updated);
     offlineStorage.saveTenant(updated);
     showToast('Company settings updated successfully', { type: 'success' });
+  };
+
+  const archiveTenant = async (confirmationName: string): Promise<void> => {
+    if (!user?.tenantId || user.tenantId !== tenant.id || user.role !== 'admin') {
+      throw new Error('Only a company admin can archive the company.');
+    }
+    await api.archiveTenant(tenant.id, confirmationName);
+    setTenant(emptyTenant());
+    setProjects([]);
+    setInvoices([]);
+    setMembers([]);
+    setInvitations([]);
+    setLoadedTenantId(null);
+    await refreshUser();
+    navigateTo('create_company');
+    showToast('Company archived. Its records are preserved and member access has been removed.', {
+      type: 'success',
+    });
   };
 
   const inviteTeamMember = async (data: {
@@ -328,12 +370,15 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         inviteTeamMember,
         removeTeamMember,
         createProject,
+        deleteProject,
         createInvoice,
         issueInvoice,
         updateInvoiceStatus,
+        deleteInvoice,
         buyStoragePack,
         renewSubscription,
         updateTenant,
+        archiveTenant,
       }}
     >
       {children}

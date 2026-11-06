@@ -340,6 +340,7 @@ export const api = {
     if (!snapshot.exists()) throw new Error('Your company record could not be found.');
     const data = snapshot.data() as Omit<TenantDoc, 'id'> & {
       createdAt?: { toDate?: () => Date };
+      archivedAt?: unknown;
       storage: TenantDoc['storage'] & { lastMeteredAt?: { toDate?: () => Date } };
       subscription: TenantDoc['subscription'] & { currentPeriodEnd?: { toDate?: () => Date } };
     };
@@ -347,6 +348,7 @@ export const api = {
       ...data,
       id: snapshot.id,
       createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
+      archivedAt: data.archivedAt == null ? undefined : dateString(data.archivedAt),
       storage: {
         ...data.storage,
         lastMeteredAt: data.storage.lastMeteredAt?.toDate?.().toISOString() || new Date().toISOString(),
@@ -393,6 +395,60 @@ export const api = {
     return updated;
   },
 
+  async archiveTenant(tenantId: string, confirmationName: string): Promise<void> {
+    if (shouldUseRemoteApi()) {
+      throw new Error('Company archiving is not available in Cloudflare mode.');
+    }
+    if (!isFirebaseConfigured) throw new Error('Firebase is required to archive a company safely.');
+    const callable = httpsCallable<
+      { expectedTenantId: string; confirmationName: string },
+      { archived: boolean }
+    >(functions, 'archiveTenant');
+    await callable({ expectedTenantId: tenantId, confirmationName });
+    offlineStorage.clearTenantData(tenantId);
+  },
+
+  async deleteProject(tenantId: string, projectId: string): Promise<string[]> {
+    let deletedInvoiceIds: string[];
+    if (isFirebaseConfigured && !shouldUseRemoteApi()) {
+      const callable = httpsCallable<
+        { tenantId: string; projectId: string },
+        { deletedInvoiceIds: string[] }
+      >(functions, 'deleteProject');
+      const result = await callable({ tenantId, projectId });
+      deletedInvoiceIds = result.data.deletedInvoiceIds;
+    } else {
+      deletedInvoiceIds = offlineStorage
+        .loadInvoices(tenantId)
+        .filter((invoice) => invoice.projectId === projectId)
+        .map((invoice) => invoice.id);
+    }
+
+    offlineStorage.saveProjects(
+      tenantId,
+      offlineStorage.loadProjects(tenantId).filter((project) => project.id !== projectId),
+    );
+    offlineStorage.saveInvoices(
+      tenantId,
+      offlineStorage.loadInvoices(tenantId).filter((invoice) => invoice.projectId !== projectId),
+    );
+    return deletedInvoiceIds;
+  },
+
+  async deleteInvoice(tenantId: string, invoiceId: string): Promise<void> {
+    if (isFirebaseConfigured && !shouldUseRemoteApi()) {
+      const callable = httpsCallable<
+        { tenantId: string; invoiceId: string },
+        { deleted: boolean }
+      >(functions, 'deleteInvoice');
+      await callable({ tenantId, invoiceId });
+    }
+    offlineStorage.saveInvoices(
+      tenantId,
+      offlineStorage.loadInvoices(tenantId).filter((invoice) => invoice.id !== invoiceId),
+    );
+  },
+
   // Allocate Serial & Create Draft Invoice (§7.3)
   async allocateSerialAndCreateInvoice(params: {
     tenantId: string;
@@ -405,7 +461,7 @@ export const api = {
   }): Promise<{ invoiceId: string; serial: string; invoice: InvoiceDoc }> {
     if (isFirebaseConfigured && !shouldUseRemoteApi()) {
       const callable = httpsCallable<
-        typeof params,
+        Omit<typeof params, 'createdBy'>,
         { invoiceId: string; serial: string; subtotal: number; tax: number; total: number }
       >(functions, 'allocateSerialAndCreateInvoice');
       const result = await callable({

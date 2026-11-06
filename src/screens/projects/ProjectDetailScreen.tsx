@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useTenant } from '../../context/TenantContext';
 import { Header } from '../../components/Header';
@@ -9,10 +9,14 @@ import { formatPKR } from '../../util/currency';
 import { formatDate } from '../../util/dates';
 import { ProjectDoc } from '../../types';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
 
 export const ProjectDetailScreen: React.FC = () => {
-  const { currentParams, invoices, navigateTo } = useTenant();
+  const { currentParams, invoices, navigateTo, deleteProject } = useTenant();
   const { role } = useAuth();
+  const { showToast } = useToast();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const project: ProjectDoc = currentParams?.project;
 
   if (!project) {
@@ -29,6 +33,21 @@ export const ProjectDetailScreen: React.FC = () => {
 
   const projectInvoices = invoices.filter((i) => i.projectId === project.id);
   const totalInvoiced = projectInvoices.reduce((sum, inv) => sum + inv.total, 0);
+
+  const handleDeleteProject = async () => {
+    setDeleting(true);
+    try {
+      await deleteProject(project.id);
+      navigateTo('projects');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not delete the project.', {
+        type: 'error',
+      });
+    } finally {
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -102,6 +121,42 @@ export const ProjectDetailScreen: React.FC = () => {
             </Text>
           </View>}
         </Card>
+
+        {role === 'admin' && (
+          <Card>
+            <Text style={styles.boxTitle}>Danger zone</Text>
+            {confirmDelete ? (
+              <>
+                <Text style={styles.deleteWarning}>
+                  This permanently deletes the project, all its invoices, and generated invoice PDFs.
+                </Text>
+                <View style={styles.deleteActions}>
+                  <Button
+                    title="Cancel"
+                    variant="outline"
+                    size="sm"
+                    disabled={deleting}
+                    onPress={() => setConfirmDelete(false)}
+                  />
+                  <Button
+                    title="Delete project and invoices"
+                    variant="danger"
+                    size="sm"
+                    loading={deleting}
+                    onPress={() => void handleDeleteProject()}
+                  />
+                </View>
+              </>
+            ) : (
+              <Button
+                title="Delete Project"
+                variant="danger"
+                size="sm"
+                onPress={() => setConfirmDelete(true)}
+              />
+            )}
+          </Card>
+        )}
 
         {/* Project Invoices Section */}
         {role !== 'client' && <Card>
@@ -311,5 +366,16 @@ const styles = StyleSheet.create({
   emptyInvoicesText: {
     fontSize: 13,
     color: '#94a3b8',
+  },
+  deleteWarning: {
+    color: '#991b1b',
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: 10,
+  },
+  deleteActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
 });

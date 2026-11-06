@@ -39,6 +39,9 @@ export const allocateSerialAndCreateInvoice = onCall(async (req) => {
     throw new HttpsError('not-found', 'Tenant not found.');
   }
   const tenant = tenantSnap.data() as TenantDoc;
+  if (tenant.archived === true) {
+    throw new HttpsError('failed-precondition', 'This company is archived.');
+  }
   if (tenant.subscription?.status === 'locked') {
     throw new HttpsError('failed-precondition', 'Tenant subscription is locked. Invoices cannot be created.');
   }

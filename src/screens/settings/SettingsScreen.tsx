@@ -9,11 +9,23 @@ import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
 import { TeamInvitationResult } from '../../types';
 import { useToast } from '../../context/ToastContext';
+import { appConfig } from '../../config/app';
+import { isFirebaseConfigured } from '../../config/firebase';
 
 export const SettingsScreen: React.FC = () => {
-  const { tenant, updateTenant, members, invitations, refreshTeam, inviteTeamMember, removeTeamMember } = useTenant();
+  const {
+    tenant,
+    updateTenant,
+    members,
+    invitations,
+    refreshTeam,
+    inviteTeamMember,
+    removeTeamMember,
+    archiveTenant,
+  } = useTenant();
   const { role, user } = useAuth();
   const { showToast } = useToast();
+  const canArchiveCompany = isFirebaseConfigured && appConfig.authProvider !== 'cloudflare';
 
   const [name, setName] = useState(tenant.name);
   const [ceoName, setCeoName] = useState(tenant.ceoName);
@@ -38,6 +50,9 @@ export const SettingsScreen: React.FC = () => {
   const [invitation, setInvitation] = useState<TeamInvitationResult | null>(null);
   const [removingMember, setRemovingMember] = useState<string | null>(null);
   const [teamLoading, setTeamLoading] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  const [archiveConfirmation, setArchiveConfirmation] = useState('');
+  const [archiving, setArchiving] = useState(false);
 
   const handleSaveCompany = async () => {
     if (role !== 'admin') {
@@ -119,6 +134,20 @@ export const SettingsScreen: React.FC = () => {
       showToast(error instanceof Error ? error.message : 'Could not remove team member.', { type: 'error' });
     } finally {
       setTeamLoading(false);
+    }
+  };
+
+  const handleArchiveCompany = async () => {
+    if (archiveConfirmation !== tenant.name) return;
+    setArchiving(true);
+    try {
+      await archiveTenant(archiveConfirmation);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not archive the company.', {
+        type: 'error',
+      });
+    } finally {
+      setArchiving(false);
     }
   };
 
@@ -334,6 +363,60 @@ export const SettingsScreen: React.FC = () => {
           ))}
           {role !== 'admin' && <Text style={styles.cardSubtitle}>Only company admins can invite or remove members.</Text>}
         </Card>
+
+        {role === 'admin' && (
+          <Card>
+            <Text style={styles.cardTitle}>Archive Company</Text>
+            <Text style={styles.archiveWarning}>
+              Archiving blocks access for all company members and prevents new invitations. Company,
+              project, invoice, and generated PDF records are preserved. Google accounts remain active
+              and can join or create another company. Previously issued PDF links may remain usable
+              until their 15-minute expiration. This archive cannot be reversed from the app.
+            </Text>
+            {!canArchiveCompany ? (
+              <Text style={styles.cardSubtitle}>
+                Company archiving requires the Firebase backend and is unavailable in Cloudflare-auth mode.
+              </Text>
+            ) : confirmArchive ? (
+              <>
+                <Input
+                  label={`Type "${tenant.name}" to confirm`}
+                  value={archiveConfirmation}
+                  onChangeText={setArchiveConfirmation}
+                  autoCapitalize="none"
+                  editable={!archiving}
+                />
+                <View style={styles.rolePickerRow}>
+                  <Button
+                    title="Cancel"
+                    variant="outline"
+                    size="sm"
+                    disabled={archiving}
+                    onPress={() => {
+                      setConfirmArchive(false);
+                      setArchiveConfirmation('');
+                    }}
+                  />
+                  <Button
+                    title="Archive company"
+                    variant="danger"
+                    size="sm"
+                    loading={archiving}
+                    disabled={archiveConfirmation !== tenant.name}
+                    onPress={() => void handleArchiveCompany()}
+                  />
+                </View>
+              </>
+            ) : (
+              <Button
+                title="Archive Company"
+                variant="danger"
+                size="sm"
+                onPress={() => setConfirmArchive(true)}
+              />
+            )}
+          </Card>
+        )}
       </ScrollView>
     </View>
   );
@@ -475,4 +558,5 @@ const styles = StyleSheet.create({
   removeButtonText: { color: '#b91c1c', fontSize: 11, fontWeight: '700' },
   removeConfirm: { marginTop: 14, padding: 12, backgroundColor: '#fff7ed', borderWidth: 1, borderColor: '#fed7aa', borderRadius: 8 },
   removeConfirmText: { fontSize: 13, fontWeight: '700', color: '#9a3412', marginBottom: 8 },
+  archiveWarning: { color: '#991b1b', fontSize: 13, lineHeight: 19, marginVertical: 10 },
 });

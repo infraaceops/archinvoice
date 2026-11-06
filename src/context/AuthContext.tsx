@@ -93,14 +93,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
       return () => { active = false; };
     }
-    if (!isFirebaseConfigured || !auth) {
+    const firebaseAuth = auth;
+    if (!isFirebaseConfigured || !firebaseAuth) {
       setLoading(false);
       return;
     }
     let active = true;
     let unsubscribeProfile = () => {};
     const unsubscribe = onAuthStateChanged(
-      auth,
+      firebaseAuth,
       (firebaseUser) => {
         unsubscribeProfile();
         if (!active) return;
@@ -113,7 +114,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         unsubscribeProfile = onSnapshot(
           doc(db, 'users', firebaseUser.uid),
           (snapshot) => {
-            if (!active || auth.currentUser?.uid !== firebaseUser.uid) return;
+            if (!active || firebaseAuth.currentUser?.uid !== firebaseUser.uid) return;
             setUser(mapFirebaseUser(
               firebaseUser,
               snapshot.exists() ? snapshot.data() as Record<string, unknown> : {},
@@ -122,7 +123,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           },
           (error) => {
             console.error('Unable to watch signed-in user profile.', error);
-            if (active && auth.currentUser?.uid === firebaseUser.uid) {
+            if (active && firebaseAuth.currentUser?.uid === firebaseUser.uid) {
               setUser(mapFirebaseUser(firebaseUser));
               setLoading(false);
             }

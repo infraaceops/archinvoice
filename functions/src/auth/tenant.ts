@@ -195,6 +195,10 @@ export const joinTenant = onCall({ region: 'us-central1' }, async (req) => {
     if (typeof tenantId !== 'string' || !tenantId) {
       throw new HttpsError('internal', 'Invitation record is invalid.');
     }
+    const tenantSnap = await transaction.get(db.doc(`tenants/${tenantId}`));
+    if (!tenantSnap.exists || tenantSnap.data()?.archived === true) {
+      throw new HttpsError('failed-precondition', 'This company is no longer accepting invitations.');
+    }
     const memberRef = db.doc(`tenants/${tenantId}/members/${uid}`);
     const userSnap = await transaction.get(userRef);
     const memberSnap = await transaction.get(memberRef);
@@ -251,8 +255,85 @@ async function requireTenantAdmin(uid: string): Promise<{ tenantId: string; memb
   if (!memberSnap.exists || memberSnap.data()?.role !== 'admin') {
     throw new HttpsError('permission-denied', 'Only a company admin can manage team members.');
   }
+  const tenantSnap = await db.doc(`tenants/${tenantId}`).get();
+  if (!tenantSnap.exists || tenantSnap.data()?.archived === true) {
+    throw new HttpsError('failed-precondition', 'This company is archived.');
+  }
   return { tenantId, member: memberSnap.data() || {} };
 }
+
+export const archiveTenant = onCall({ region: 'us-central1', timeoutSeconds: 540 }, async (req) => {
+  const { uid } = requireVerifiedEmail(req);
+  const { expectedTenantId, confirmationName } = req.data as {
+    expectedTenantId?: unknown;
+    confirmationName?: unknown;
+  };
+  if (typeof expectedTenantId !== 'string' || !expectedTenantId ||
+      !/^[A-Za-z0-9_-]{1,150}$/.test(expectedTenantId) ||
+      typeof confirmationName !== 'string') {
+    throw new HttpsError('invalid-argument', 'Confirm the company name before archiving.');
+  }
+
+  const db = getFirestore();
+  const userRef = db.doc(`users/${uid}`);
+  const tenantRef = db.doc(`tenants/${expectedTenantId}`);
+  const [userSnap, memberSnap, tenantSnap] = await Promise.all([
+    userRef.get(),
+    db.doc(`tenants/${expectedTenantId}/members/${uid}`).get(),
+    tenantRef.get(),
+  ]);
+  if (userSnap.data()?.tenantId !== expectedTenantId ||
+      !memberSnap.exists ||
+      memberSnap.data()?.role !== 'admin') {
+    throw new HttpsError('permission-denied', 'Only a company admin can archive this company.');
+  }
+  if (!tenantSnap.exists) throw new HttpsError('not-found', 'Company not found.');
+  const tenantName = tenantSnap.data()?.name;
+  if (typeof tenantName !== 'string' || confirmationName.trim() !== tenantName) {
+    throw new HttpsError('failed-precondition', 'The company name confirmation does not match.');
+  }
+  if (tenantSnap.data()?.archived === true) {
+    throw new HttpsError('failed-precondition', 'This company is already archived.');
+  }
+
+  const memberSnapshots = await db.collection(`tenants/${expectedTenantId}/members`).get();
+  const otherMemberRefs = memberSnapshots.docs
+    .filter((member) => member.id !== uid)
+    .map((member) => db.doc(`users/${member.id}`));
+
+  for (let offset = 0; offset < otherMemberRefs.length; offset += 400) {
+    const userRefs = otherMemberRefs.slice(offset, offset + 400);
+    const userSnapshots = await db.getAll(...userRefs);
+    const batch = db.batch();
+    let updateCount = 0;
+    userSnapshots.forEach((snapshot) => {
+      if (snapshot.exists && snapshot.data()?.tenantId === expectedTenantId) {
+        batch.update(snapshot.ref, {
+          tenantId: null,
+          role: null,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+        updateCount += 1;
+      }
+    });
+    if (updateCount > 0) await batch.commit();
+  }
+
+  const finalBatch = db.batch();
+  finalBatch.update(userRef, {
+    tenantId: null,
+    role: null,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  finalBatch.update(tenantRef, {
+    archived: true,
+    archivedAt: FieldValue.serverTimestamp(),
+    archivedBy: uid,
+  });
+  await finalBatch.commit();
+
+  return { archived: true };
+});
 
 export const createTeamInvitation = onCall({ region: 'us-central1' }, async (req) => {
   const { uid } = requireVerifiedEmail(req);

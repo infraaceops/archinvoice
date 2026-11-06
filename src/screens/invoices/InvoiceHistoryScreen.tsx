@@ -9,14 +9,18 @@ import { formatPKR } from '../../util/currency';
 import { formatDate } from '../../util/dates';
 import { Category, InvoiceDoc, InvoiceStatus } from '../../types';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 
 export const InvoiceHistoryScreen: React.FC = () => {
-  const { invoices, navigateTo, updateInvoiceStatus } = useTenant();
+  const { invoices, navigateTo, updateInvoiceStatus, deleteInvoice } = useTenant();
   const { showToast } = useToast();
+  const { role } = useAuth();
 
   const [categoryFilter, setCategoryFilter] = useState<'all' | Category>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | InvoiceStatus>('all');
   const [search, setSearch] = useState('');
+  const [confirmDeleteInvoiceId, setConfirmDeleteInvoiceId] = useState<string | null>(null);
+  const [deletingInvoiceId, setDeletingInvoiceId] = useState<string | null>(null);
 
   const filteredInvoices = invoices.filter((inv) => {
     const matchesCategory = categoryFilter === 'all' || inv.category === categoryFilter;
@@ -37,6 +41,22 @@ export const InvoiceHistoryScreen: React.FC = () => {
         type: 'success',
       });
     }, 1200);
+  };
+
+  const handleDeleteInvoice = async () => {
+    if (!confirmDeleteInvoiceId) return;
+    const invoiceId = confirmDeleteInvoiceId;
+    setDeletingInvoiceId(invoiceId);
+    try {
+      await deleteInvoice(invoiceId);
+      setConfirmDeleteInvoiceId(null);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not delete the invoice.', {
+        type: 'error',
+      });
+    } finally {
+      setDeletingInvoiceId(null);
+    }
   };
 
   return (
@@ -116,6 +136,34 @@ export const InvoiceHistoryScreen: React.FC = () => {
             </Text>
           </View>
 
+          {confirmDeleteInvoiceId && (() => {
+            const invoiceToDelete = invoices.find((invoice) => invoice.id === confirmDeleteInvoiceId);
+            if (!invoiceToDelete) return null;
+            return (
+              <View style={styles.deleteConfirm}>
+                <Text style={styles.deleteConfirmText}>
+                  Permanently delete invoice {invoiceToDelete.serial} and its generated PDF?
+                </Text>
+                <View style={styles.deleteActions}>
+                  <Button
+                    title="Cancel"
+                    variant="outline"
+                    size="sm"
+                    disabled={deletingInvoiceId === invoiceToDelete.id}
+                    onPress={() => setConfirmDeleteInvoiceId(null)}
+                  />
+                  <Button
+                    title="Delete Invoice"
+                    variant="danger"
+                    size="sm"
+                    loading={deletingInvoiceId === invoiceToDelete.id}
+                    onPress={() => void handleDeleteInvoice()}
+                  />
+                </View>
+              </View>
+            );
+          })()}
+
           {filteredInvoices.map((inv: InvoiceDoc) => (
             <View key={inv.id} style={styles.invoiceRow}>
               <TouchableOpacity
@@ -159,6 +207,14 @@ export const InvoiceHistoryScreen: React.FC = () => {
                       <Text style={[styles.actionLinkText, { color: '#059669' }]}>Mark Paid</Text>
                     </TouchableOpacity>
                   )}
+                  {role === 'admin' && (
+                    <TouchableOpacity
+                      onPress={() => setConfirmDeleteInvoiceId(inv.id)}
+                      disabled={deletingInvoiceId !== null}
+                    >
+                      <Text style={[styles.actionLinkText, { color: '#b91c1c' }]}>Delete</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
             </View>
@@ -195,6 +251,25 @@ const styles = StyleSheet.create({
   filterCard: {
     padding: 16,
     marginBottom: 16,
+  },
+  deleteConfirm: {
+    padding: 12,
+    marginBottom: 10,
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    borderRadius: 8,
+  },
+  deleteConfirmText: {
+    color: '#991b1b',
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  deleteActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   searchRow: {
     flexDirection: 'row',

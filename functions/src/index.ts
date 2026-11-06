@@ -10,11 +10,13 @@ initializeApp();
 // Export all Cloud Functions
 export {
   createTenant,
+  archiveTenant,
   joinTenant,
   createTeamInvitation,
   listTenantTeam,
   removeTeamMember,
 } from './auth/tenant';
+export { deleteProject, deleteInvoice } from './projects/delete';
 export { allocateSerialAndCreateInvoice } from './counters/serial';
 export { issueInvoiceAndGeneratePdf, getSignedPdfUrl } from './invoices/issue';
 export { playRTDNWebhook, verifyPurchase } from './billing/play';

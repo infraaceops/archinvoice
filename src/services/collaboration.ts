@@ -191,6 +191,23 @@ function validateFiles(files: DrawingFile[]): void {
 }
 
 export const collaboration = {
+  deleteProjectData(projectId: string): void {
+    const data = readData();
+    const drawingIds = new Set(
+      data.drawings.filter((drawing) => drawing.projectId === projectId).map((drawing) => drawing.id),
+    );
+    const revisionIds = new Set(
+      data.revisions.filter((revision) => drawingIds.has(revision.drawingId)).map((revision) => revision.id),
+    );
+    data.clients = data.clients.filter((client) => client.projectId !== projectId);
+    data.drawings = data.drawings.filter((drawing) => drawing.projectId !== projectId);
+    data.revisions = data.revisions.filter((revision) => !drawingIds.has(revision.drawingId));
+    data.comments = data.comments.filter((comment) => !drawingIds.has(comment.drawingId));
+    data.events = data.events.filter((event) => !revisionIds.has(event.revisionId));
+    data.notifications = data.notifications.filter((notification) => notification.projectId !== projectId);
+    writeData(data);
+  },
+
   getProjectClients(projectId: string): ProjectClientDoc[] {
     return readData().clients.filter((client) => client.projectId === projectId);
   },

@@ -30,6 +30,9 @@ export const issueInvoiceAndGeneratePdf = onCall(async (req) => {
   const tenantSnap = await db.doc(`tenants/${tenantId}`).get();
   if (!tenantSnap.exists) throw new HttpsError('not-found', 'Tenant not found.');
   const tenant = tenantSnap.data() as TenantDoc;
+  if (tenant.archived === true) {
+    throw new HttpsError('failed-precondition', 'This company is archived.');
+  }
 
   // Check storage quota: total allowed = (includedGb + purchasedGb) * 1e9
   const totalStorageQuotaBytes = ((tenant.storage?.includedGb || 1) + (tenant.storage?.purchasedGb || 0)) * 1024 * 1024 * 1024;
@@ -180,6 +183,9 @@ export const getSignedPdfUrl = onCall(async (req) => {
   const tenantSnap = await db.doc(`tenants/${tenantId}`).get();
   if (!tenantSnap.exists) throw new HttpsError('not-found', 'Tenant not found.');
   const tenant = tenantSnap.data() as TenantDoc;
+  if (tenant.archived === true) {
+    throw new HttpsError('failed-precondition', 'This company is archived.');
+  }
 
   // Check egress hard cap
   const hardCapBytes = (pricing.egress.hardCapGbPerMonth || 10) * 1024 * 1024 * 1024;

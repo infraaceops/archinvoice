@@ -177,6 +177,16 @@ company ID; accounts without a company membership start with no company data.
 Company settings and project/invoice changes are shared with invited teammates
 after they accept an invitation using the invited Google email.
 
+Company admins can archive the company after typing its exact name. Archiving
+preserves its Firestore records and generated PDFs, revokes active member
+profiles, and blocks further company access; Google accounts remain active.
+Admins can also permanently delete projects (including their invoices and PDFs)
+or individual invoices (including issued invoices and their PDFs). On Firebase,
+these deletions are performed by Firebase Functions rather than direct client
+writes. In optional Cloudflare-auth mode, project and invoice data remains
+device-local, so deletion only affects that device's cache; company archiving is
+not available in that mode.
+
 ### Firebase and Google configuration
 
 1. Create a Firebase project and register a Firebase Web app. Enable **Google**
@@ -350,3 +360,10 @@ workspace/project/invoice data synchronization.
   Most project and invoice flows also retain existing demo/local behavior and
   must be migrated and security-tested before treating the whole product as a
   production multi-tenant SaaS.
+ut7tyutft9uyoihk/.
+
+ mlnk jhfhjn k\]
+  k jvhhmlnk\bnbuu h 
+
+    j j
+     j jkkkgj  []] jj jgyd try i;] jb kjk ]\

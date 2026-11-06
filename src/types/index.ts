@@ -18,6 +18,9 @@ export interface UserDoc {
 
 export interface TenantDoc {
   id: string;
+  archived?: boolean;
+  archivedAt?: string;
+  archivedBy?: string;
   name: string;
   ceoName: string;
   logoUrl: string | null;

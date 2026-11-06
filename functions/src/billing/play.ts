@@ -96,6 +96,9 @@ export const verifyPurchase = onCall(async (req) => {
   if (!tenantSnap.exists) {
     throw new HttpsError('not-found', 'Tenant not found.');
   }
+  if (tenantSnap.data()?.archived === true) {
+    throw new HttpsError('failed-precondition', 'This company is archived.');
+  }
 
   const now = new Date();
 

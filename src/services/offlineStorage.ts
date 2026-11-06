@@ -37,6 +37,17 @@ function getItem(key: string): string | null {
   return memoryCache[key] || null;
 }
 
+function removeItem(key: string): void {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem(key);
+    }
+  } catch {
+    // Keep cleanup best-effort when browser storage is unavailable.
+  }
+  delete memoryCache[key];
+}
+
 export function emptyTenant(id = ''): TenantDoc {
   const now = new Date().toISOString();
   return {
@@ -101,6 +112,10 @@ export const offlineStorage = {
 
   saveTenant(tenant: TenantDoc): void {
     setItem(scopedKey(STORAGE_KEYS.TENANT, tenant.id), JSON.stringify(tenant));
+  },
+
+  clearTenantData(tenantId: string): void {
+    Object.values(STORAGE_KEYS).forEach((key) => removeItem(scopedKey(key, tenantId)));
   },
 
   loadProjects(tenantId: string): ProjectDoc[] {

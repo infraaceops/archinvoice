@@ -20,8 +20,13 @@ service cloud.firestore {
     function invitePath(tenantId, inviteId) {
       return /databases/$(db)/documents/tenants/$(tenantId)/invites/$(inviteId);
     }
+    function activeTenant(tenantId) {
+      return exists(tenantPath(tenantId)) &&
+        get(tenantPath(tenantId)).data.get('archived', false) == false;
+    }
     function memberOf(tenantId) {
-      return signedIn() && exists(memberPath(tenantId, uid()));
+      return signedIn() && activeTenant(tenantId) &&
+        exists(memberPath(tenantId, uid()));
     }
     function roleOf(tenantId) {
       return get(memberPath(tenantId, uid())).data.role;
@@ -117,6 +122,7 @@ service cloud.firestore {
       let inviteAfter = getAfter(invitePath(tenantId, member.inviteId)).data;
       let userAfter = getAfter(userPath(uid())).data;
       return verifiedEmail() && memberId == uid() &&
+        activeTenant(tenantId) &&
         member.keys().hasOnly([
           'uid', 'displayName', 'email', 'phone', 'role', 'invitedBy', 'joinedAt', 'inviteId'
         ]) &&
@@ -145,7 +151,7 @@ service cloud.firestore {
     function validMemberProfileUpdate(userId) {
       let next = request.resource.data;
       return verifiedEmail() && userId == uid() && resource.data.tenantId == null &&
-        next.tenantId is string &&
+        next.tenantId is string && activeTenant(next.tenantId) &&
         next.keys().hasOnly([
           'uid', 'displayName', 'email', 'photoUrl', 'tenantId', 'role', 'createdAt', 'updatedAt'
         ]) &&
@@ -247,7 +253,7 @@ service cloud.firestore {
       match /projects/{projectId} {
         allow read: if memberOf(tenantId);
         allow create, update: if canWriteInvoices(tenantId);
-        allow delete: if isAdmin(tenantId);
+        allow delete: if false;
       }
 
       match /counters/{counterId} {
