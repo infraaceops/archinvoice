@@ -1,23 +1,25 @@
 import React, { createContext, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import {
-  GoogleAuthProvider,
+  EmailAuthProvider,
   User as FirebaseUser,
+  reauthenticateWithCredential,
   onAuthStateChanged,
-  signInWithCredential,
-  signInWithPopup,
+  signInWithEmailAndPassword,
   signOut as firebaseSignOut,
 } from 'firebase/auth';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { Role, UserDoc } from '../types';
-import { auth, db, isFirebaseConfigured } from '../config/firebase';
-import { appConfig, buildApiUrl } from '../config/app';
+import { auth, db, functions, isFirebaseConfigured } from '../config/firebase';
+import { appConfig } from '../config/app';
 
 interface AuthContextType {
   user: UserDoc | null;
   role: Role | null;
   isAuthenticated: boolean;
   loading: boolean;
-  signInWithGoogle: (idToken?: string, returnTo?: string) => Promise<void>;
+  signInWithUsername: (username: string, password: string) => Promise<void>;
+  changeCredentials: (currentUsername: string, currentPassword: string, newUsername: string, newPassword: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<UserDoc | null>;
 }
@@ -36,10 +38,10 @@ function mapFirebaseUser(firebaseUser: FirebaseUser, profile: Record<string, unk
   return {
     uid: firebaseUser.uid,
     displayName:
+      firebaseUser.email?.split('@')[0] ||
       (typeof profile.displayName === 'string' && profile.displayName) ||
-      firebaseUser.displayName ||
-      firebaseUser.email ||
       'User',
+    username: firebaseUser.email?.split('@')[0] || '',
     email: firebaseUser.email || '',
     photoUrl:
       (typeof profile.photoUrl === 'string' && profile.photoUrl) ||
@@ -54,17 +56,21 @@ function mapFirebaseUser(firebaseUser: FirebaseUser, profile: Record<string, unk
   };
 }
 
+function usernameEmail(username: string): string {
+  return `${username.trim().toLowerCase()}@${appConfig.usernameAuthDomain}`;
+}
+
+function normalizedUsername(username: string): string {
+  const normalized = username.trim().toLowerCase();
+  if (!/^[a-z0-9](?:[a-z0-9._-]{1,30}[a-z0-9])$/.test(normalized)) {
+    throw new Error('Username must be 3–32 characters and use letters, numbers, dots, underscores, or hyphens.');
+  }
+  return normalized;
+}
+
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserDoc | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-
-  const loadCloudflareSession = async (): Promise<UserDoc | null> => {
-    if (!appConfig.apiBaseUrl) throw new Error('Set EXPO_PUBLIC_API_BASE_URL to the deployed Cloudflare Worker URL.');
-    const response = await fetch(buildApiUrl('/api/auth/session'), { credentials: 'include' });
-    if (!response.ok) throw new Error(`Unable to verify your sign-in session (${response.status}).`);
-    const result = await response.json() as { user: UserDoc | null };
-    return result.user;
-  };
 
   const loadProfile = async (firebaseUser: FirebaseUser): Promise<UserDoc> => {
     if (!isFirebaseConfigured) {
@@ -78,21 +84,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   useEffect(() => {
-    if (appConfig.authProvider === 'cloudflare') {
-      let active = true;
-      void loadCloudflareSession()
-        .then((sessionUser) => {
-          if (active) setUser(sessionUser);
-        })
-        .catch((error: unknown) => {
-          console.error('Unable to verify the Cloudflare sign-in session.', error);
-          if (active) setUser(null);
-        })
-        .finally(() => {
-          if (active) setLoading(false);
-        });
-      return () => { active = false; };
-    }
     const firebaseAuth = auth;
     if (!isFirebaseConfigured || !firebaseAuth) {
       setLoading(false);
@@ -145,58 +136,48 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
   }, []);
 
-  const signInWithGoogle = async (idToken?: string, returnTo = '/'): Promise<void> => {
-    if (appConfig.authProvider === 'cloudflare') {
-      if (typeof window === 'undefined') {
-        throw new Error('Cloudflare Google sign-in is currently available in the web app only.');
-      }
-      if (!appConfig.apiBaseUrl) {
-        throw new Error('Set EXPO_PUBLIC_API_BASE_URL to the deployed Cloudflare Worker URL.');
-      }
-      const startUrl = new URL(buildApiUrl('/auth/google/start'));
-      startUrl.searchParams.set('returnTo', returnTo);
-      window.location.assign(startUrl.toString());
-      return;
-    }
+  const signInWithUsername = async (username: string, password: string): Promise<void> => {
     if (!isFirebaseConfigured || !auth) {
-      const authDomain = process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || '';
-      const hint = authDomain.includes('.firebaseapp.com') || authDomain.includes('.web.app')
-        ? 'Use the exact Firebase project authDomain and matching Google OAuth web client.'
-        : 'Use your Firebase project authDomain, such as archinvoice-50551.firebaseapp.com.';
-      throw new Error(`Firebase is not configured. ${hint}`);
+      throw new Error('Firebase is not configured. Add the Firebase client settings to your environment.');
     }
-    const provider = new GoogleAuthProvider();
-    if (idToken) {
-      await signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
-    } else if (typeof window !== 'undefined') {
-      await signInWithPopup(auth, provider);
-    } else {
-      throw new Error('Google sign-in requires a Google ID token on this device.');
+    const normalized = normalizedUsername(username);
+    await signInWithEmailAndPassword(auth, usernameEmail(normalized), password);
+  };
+
+  const changeCredentials = async (
+    currentUsername: string,
+    currentPassword: string,
+    newUsername: string,
+    newPassword: string,
+  ): Promise<void> => {
+    if (!auth?.currentUser) throw new Error('Sign in before changing account credentials.');
+    const oldUsername = normalizedUsername(currentUsername);
+    const nextUsername = normalizedUsername(newUsername);
+    if (newPassword.length < 12 || newPassword.length > 128) {
+      throw new Error('New password must be between 12 and 128 characters.');
     }
+    const currentUser = auth.currentUser;
+    if (currentUser.email?.toLowerCase() !== usernameEmail(oldUsername)) {
+      throw new Error('Previous username does not match the signed-in account.');
+    }
+    const credential = EmailAuthProvider.credential(usernameEmail(oldUsername), currentPassword);
+    await reauthenticateWithCredential(currentUser, credential);
+    const changeCredentials = httpsCallable<
+      { newUsername: string; newPassword: string },
+      { username: string }
+    >(functions, 'changeAccountCredentials');
+    await changeCredentials({ newUsername: nextUsername, newPassword });
+    await currentUser.reload();
+    await currentUser.getIdToken(true);
+    await refreshUser();
   };
 
   const signOut = async (): Promise<void> => {
-    if (appConfig.authProvider === 'cloudflare') {
-      const response = await fetch(buildApiUrl('/api/auth/logout'), {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: '{}',
-      });
-      if (!response.ok) throw new Error(`Unable to sign out (${response.status}).`);
-      setUser(null);
-      return;
-    }
     if (!auth) throw new Error('Firebase is not configured.');
     await firebaseSignOut(auth);
   };
 
   const refreshUser = async (): Promise<UserDoc | null> => {
-    if (appConfig.authProvider === 'cloudflare') {
-      const refreshedUser = await loadCloudflareSession();
-      setUser(refreshedUser);
-      return refreshedUser;
-    }
     if (!auth) {
       setUser(null);
       return null;
@@ -217,7 +198,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       role: user?.role || null,
       isAuthenticated: Boolean(user),
       loading,
-      signInWithGoogle,
+      signInWithUsername,
+      changeCredentials,
       signOut,
       refreshUser,
     }),

@@ -1,23 +1,7 @@
 interface Env {
   DB: D1Database;
-  GOOGLE_CLIENT_ID: string;
-  GOOGLE_CLIENT_SECRET: string;
   APP_ORIGIN: string;
   SESSION_COOKIE_NAME?: string;
-}
-
-interface GoogleClaims {
-  sub: string;
-  email: string;
-  email_verified: boolean | 'true';
-  name?: string;
-  picture?: string;
-  aud: string;
-  azp?: string;
-  iss: string;
-  exp: number;
-  nbf?: number;
-  nonce: string;
 }
 
 interface SessionUser {
@@ -30,8 +14,6 @@ interface SessionUser {
   createdAt: string;
 }
 
-const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
-const OAUTH_STATE_TTL_SECONDS = 60 * 10;
 const encoder = new TextEncoder();
 
 function json(data: unknown, status = 200, headers: HeadersInit = {}): Response {
@@ -39,13 +21,6 @@ function json(data: unknown, status = 200, headers: HeadersInit = {}): Response 
     status,
     headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers },
   });
-}
-
-function safeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let mismatch = 0;
-  for (let i = 0; i < a.length; i += 1) mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return mismatch === 0;
 }
 
 function cookieValue(request: Request, name: string): string | null {
@@ -101,31 +76,6 @@ async function sha256(value: string): Promise<string> {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-function randomToken(byteLength = 32): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(byteLength));
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-function base64Url(bytes: Uint8Array): string {
-  let binary = '';
-  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-async function createPkceChallenge(verifier: string): Promise<string> {
-  return base64Url(new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(verifier))));
-}
-
-function decodeBase64Url(value: string): Uint8Array {
-  const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
-  const padded = normalized + '='.repeat((4 - normalized.length % 4) % 4);
-  return Uint8Array.from(atob(padded), (char) => char.charCodeAt(0));
-}
-
-function validEmail(value: unknown): value is string {
-  return typeof value === 'string' && value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
-
 async function bodyObject(request: Request): Promise<Record<string, unknown>> {
   if (!request.headers.get('Content-Type')?.toLowerCase().includes('application/json')) {
     throw new HttpError(415, 'Content-Type must be application/json.');
@@ -175,45 +125,6 @@ async function assertMutationOrigin(request: Request, env: Env): Promise<void> {
   }
 }
 
-async function verifyGoogleIdToken(idToken: string, env: Env, expectedNonce: string): Promise<GoogleClaims> {
-  const parts = idToken.split('.');
-  if (parts.length !== 3) throw new HttpError(401, 'Google returned an invalid identity token.');
-  let header: { alg?: string; kid?: string };
-  let claims: GoogleClaims;
-  try {
-    header = JSON.parse(new TextDecoder().decode(decodeBase64Url(parts[0]))) as { alg?: string; kid?: string };
-    claims = JSON.parse(new TextDecoder().decode(decodeBase64Url(parts[1]))) as GoogleClaims;
-  } catch {
-    throw new HttpError(401, 'Google returned an invalid identity token.');
-  }
-  if (header.alg !== 'RS256' || !header.kid) throw new HttpError(401, 'Google identity token algorithm is not accepted.');
-  const jwksResponse = await fetch('https://www.googleapis.com/oauth2/v3/certs', {
-    cf: { cacheTtl: 3600, cacheEverything: true },
-  } as RequestInit);
-  if (!jwksResponse.ok) throw new HttpError(502, 'Google signing keys could not be fetched.');
-  const jwks = await jwksResponse.json() as { keys: Array<JsonWebKey & { kid?: string }> };
-  const jwk = jwks.keys.find((key) => key.kid === header.kid);
-  if (!jwk) throw new HttpError(401, 'Google identity token uses an unknown signing key.');
-  const publicKey = await crypto.subtle.importKey('jwk', jwk, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
-  const signature = decodeBase64Url(parts[2]);
-  const verified = await crypto.subtle.verify(
-    'RSASSA-PKCS1-v1_5',
-    publicKey,
-    signature,
-    encoder.encode(`${parts[0]}.${parts[1]}`),
-  );
-  const issuerValid = claims.iss === 'https://accounts.google.com' || claims.iss === 'accounts.google.com';
-  const emailVerified = claims.email_verified === true || claims.email_verified === 'true';
-  const nowSeconds = Date.now() / 1000;
-  if (!verified || !issuerValid || claims.aud !== env.GOOGLE_CLIENT_ID ||
-      (claims.azp !== undefined && claims.azp !== env.GOOGLE_CLIENT_ID) ||
-      claims.exp <= nowSeconds - 30 || (claims.nbf !== undefined && claims.nbf > nowSeconds + 30) ||
-      !safeEqual(claims.nonce, expectedNonce) || !claims.sub || !validEmail(claims.email) || !emailVerified) {
-    throw new HttpError(401, 'Google identity could not be verified. Please retry sign-in.');
-  }
-  return claims;
-}
-
 async function getSessionUser(request: Request, env: Env): Promise<SessionUser | null> {
   const token = cookieValue(request, sessionCookieName(env));
   if (!token || !/^[0-9a-f]{64}$/.test(token)) return null;
@@ -243,101 +154,6 @@ async function requireSession(request: Request, env: Env): Promise<SessionUser> 
   return user;
 }
 
-async function startGoogleAuth(request: Request, env: Env): Promise<Response> {
-  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) throw new HttpError(503, 'Google sign-in is not configured on the API.');
-  const state = randomToken();
-  const nonce = randomToken();
-  const verifier = randomToken(48);
-  const challenge = await createPkceChallenge(verifier);
-  const expiry = new Date(Date.now() + OAUTH_STATE_TTL_SECONDS * 1000).toISOString();
-  const requestedReturnTo = new URL(request.url).searchParams.get('returnTo') || '/';
-  let returnTo = '/';
-  if (requestedReturnTo.startsWith('/') && !requestedReturnTo.startsWith('//') && !requestedReturnTo.includes('\\')) {
-    const parsedReturnTo = new URL(requestedReturnTo, validAppOrigin(env));
-    if (parsedReturnTo.origin === validAppOrigin(env)) {
-      returnTo = `${parsedReturnTo.pathname}${parsedReturnTo.search}`;
-    }
-  }
-  const now = new Date().toISOString();
-  await env.DB.batch([
-    env.DB.prepare('DELETE FROM oauth_states WHERE expires_at <= ?').bind(now),
-    env.DB.prepare('DELETE FROM sessions WHERE expires_at <= ?').bind(now),
-    env.DB.prepare('INSERT INTO oauth_states (state_hash, nonce, code_verifier, return_to, expires_at) VALUES (?, ?, ?, ?, ?)')
-      .bind(await sha256(state), nonce, verifier, returnTo, expiry),
-  ]);
-  const callback = `${new URL(request.url).origin}/auth/google/callback`;
-  const google = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-  google.searchParams.set('client_id', env.GOOGLE_CLIENT_ID);
-  google.searchParams.set('redirect_uri', callback);
-  google.searchParams.set('response_type', 'code');
-  google.searchParams.set('scope', 'openid email profile');
-  google.searchParams.set('state', state);
-  google.searchParams.set('nonce', nonce);
-  google.searchParams.set('code_challenge', challenge);
-  google.searchParams.set('code_challenge_method', 'S256');
-  google.searchParams.set('prompt', 'select_account');
-  return new Response(null, {
-    status: 302,
-    headers: {
-      Location: google.toString(),
-      'Cache-Control': 'no-store',
-      'Set-Cookie': cookie('archinvoice_oauth_state', state, OAUTH_STATE_TTL_SECONDS, '/auth/google/callback'),
-    },
-  });
-}
-
-async function finishGoogleAuth(request: Request, env: Env): Promise<Response> {
-  const url = new URL(request.url);
-  const state = url.searchParams.get('state') || '';
-  const code = url.searchParams.get('code') || '';
-  const stateCookie = cookieValue(request, 'archinvoice_oauth_state');
-  if (!state || !code || !stateCookie || !safeEqual(state, stateCookie)) {
-    throw new HttpError(400, 'Google sign-in state is missing or invalid.');
-  }
-  const stateHash = await sha256(state);
-  const oauthState = await env.DB.prepare(
-    'SELECT nonce, code_verifier, return_to FROM oauth_states WHERE state_hash = ? AND expires_at > ?',
-  ).bind(stateHash, new Date().toISOString()).first<{ nonce: string; code_verifier: string; return_to: string }>();
-  if (!oauthState) throw new HttpError(400, 'Google sign-in request expired. Please retry.');
-  await env.DB.prepare('DELETE FROM oauth_states WHERE state_hash = ?').bind(stateHash).run();
-
-  const callback = `${url.origin}/auth/google/callback`;
-  const tokensResponse = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      code,
-      client_id: env.GOOGLE_CLIENT_ID,
-      client_secret: env.GOOGLE_CLIENT_SECRET,
-      redirect_uri: callback,
-      grant_type: 'authorization_code',
-      code_verifier: oauthState.code_verifier,
-    }),
-  });
-  if (!tokensResponse.ok) throw new HttpError(401, 'Google could not complete sign-in. Verify the OAuth callback URL.');
-  const tokens = await tokensResponse.json() as { id_token?: string };
-  if (!tokens.id_token) throw new HttpError(401, 'Google did not return an identity token.');
-  const claims = await verifyGoogleIdToken(tokens.id_token, env, oauthState.nonce);
-  const now = new Date().toISOString();
-  await env.DB.prepare(
-    `INSERT INTO users (id, email, display_name, photo_url, tenant_id, role, created_at, updated_at)
-     VALUES (?, ?, ?, ?, NULL, NULL, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET email = excluded.email, display_name = excluded.display_name,
-     photo_url = excluded.photo_url, updated_at = excluded.updated_at`,
-  ).bind(claims.sub, claims.email.toLowerCase(), claims.name || claims.email, claims.picture || null, now, now).run();
-  const session = randomToken();
-  const expiresAt = new Date(Date.now() + SESSION_TTL_SECONDS * 1000).toISOString();
-  await env.DB.prepare('INSERT INTO sessions (token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)')
-    .bind(await sha256(session), claims.sub, expiresAt, now).run();
-  const responseHeaders = new Headers({
-    Location: new URL(oauthState.return_to, validAppOrigin(env)).toString(),
-    'Cache-Control': 'no-store',
-    'Set-Cookie': cookie(sessionCookieName(env), session, SESSION_TTL_SECONDS),
-  });
-  responseHeaders.append('Set-Cookie', cookie('archinvoice_oauth_state', '', 0, '/auth/google/callback'));
-  return new Response(null, { status: 302, headers: responseHeaders });
-}
-
 function tenantView(row: Record<string, unknown>): Record<string, unknown> {
   const currentDate = new Date();
   const expiry = new Date(currentDate.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
@@ -361,7 +177,7 @@ function tenantView(row: Record<string, unknown>): Record<string, unknown> {
     },
     settings: {
       invoiceDefaults: {
-        prefix: { architecture: 'ARCH', interior: 'INT', supervision: 'SUP' },
+        prefix: { architecture: 'ABS', interior: 'INT', supervision: 'SUP' },
         startAt: { architecture: 1, interior: 1, supervision: 1 },
         financialYear: String(currentDate.getFullYear()),
       },
@@ -444,8 +260,6 @@ export default {
         await env.DB.prepare('SELECT 1').first();
         return json({ status: 'ok' });
       }
-      if (url.pathname === '/auth/google/start' && request.method === 'GET') return await startGoogleAuth(request, env);
-      if (url.pathname === '/auth/google/callback' && request.method === 'GET') return await finishGoogleAuth(request, env);
       if (!url.pathname.startsWith('/api/')) return json({ error: 'Not found.' }, 404);
       const response = await routeApi(request, env, url);
       const headers = new Headers(response.headers);

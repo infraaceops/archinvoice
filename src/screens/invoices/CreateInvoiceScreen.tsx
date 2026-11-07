@@ -26,6 +26,7 @@ export const CreateInvoiceScreen: React.FC = () => {
   const [clientName, setClientName] = useState<string>(
     preselectedProject ? preselectedProject.clientName : projects[0]?.clientName || ''
   );
+  const [description, setDescription] = useState('');
   const [lineItems, setLineItems] = useState<LineItem[]>([
     {
       desc: 'Architectural Working Drawings & Submission Dossier',
@@ -130,6 +131,10 @@ export const CreateInvoiceScreen: React.FC = () => {
       showToast('Client name is required.', { type: 'error' });
       return;
     }
+    if (description.length > 2000) {
+      showToast('Invoice description must be 2,000 characters or fewer.', { type: 'error' });
+      return;
+    }
 
     setLoading(true);
     try {
@@ -139,6 +144,7 @@ export const CreateInvoiceScreen: React.FC = () => {
         lineItems,
         taxRate: parseFloat(taxRate) || 0,
         clientName: clientName.trim(),
+        description: description.trim(),
       });
       navigateTo('invoice_preview', { invoice });
     } catch (e: any) {
@@ -149,7 +155,10 @@ export const CreateInvoiceScreen: React.FC = () => {
   };
 
   const fy = tenant.settings?.invoiceDefaults?.financialYear || '2025';
-  const prefix = tenant.settings?.invoiceDefaults?.prefix?.[category] || 'ARCH';
+  const configuredPrefix = tenant.settings?.invoiceDefaults?.prefix?.[category];
+  const prefix = category === 'architecture' && configuredPrefix === 'ARCH'
+    ? 'ABS'
+    : configuredPrefix || (category === 'architecture' ? 'ABS' : category.slice(0, 3).toUpperCase());
   const nextSeq = tenant.settings?.invoiceDefaults?.startAt?.[category] || 1;
 
   return (
@@ -219,7 +228,17 @@ export const CreateInvoiceScreen: React.FC = () => {
             label="Bill To Client *"
             value={clientName}
             onChangeText={setClientName}
-            placeholder="e.g. Malik Tariq"
+            placeholder="Client name"
+          />
+          <Input
+            label="Invoice Description"
+            value={description}
+            onChangeText={setDescription}
+            placeholder="Optional notes or summary to include in the PDF"
+            multiline
+            maxLength={2000}
+            textAlignVertical="top"
+            style={{ minHeight: 88, paddingTop: 10 }}
           />
         </Card>
 

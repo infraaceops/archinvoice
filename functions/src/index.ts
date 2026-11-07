@@ -12,6 +12,7 @@ export {
   createTenant,
   archiveTenant,
 } from './auth/tenant';
+export { changeAccountCredentials } from './auth/credentials';
 export { deleteProject, deleteInvoice } from './projects/delete';
 export { allocateSerialAndCreateInvoice } from './counters/serial';
 export { issueInvoiceAndGeneratePdf, getSignedPdfUrl } from './invoices/issue';

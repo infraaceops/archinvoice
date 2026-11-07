@@ -90,6 +90,7 @@ export interface InvoiceDoc {
   financialYear: string;
   projectId: string;
   clientName: string;
+  description?: string;
   lineItems: LineItem[];
   subtotal: number;
   tax: number;

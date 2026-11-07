@@ -140,19 +140,18 @@ export const INVOICE_HTML_TEMPLATE = `<!DOCTYPE html>
     padding-top: 20px;
     border-top: 1px solid #e2e8f0;
   }
-  .seal-container {
-    text-align: center;
+  .invoice-description {
+    margin-top: 18px;
+    padding: 12px 16px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background-color: #f8fafc;
+    font-size: 12px;
+    white-space: pre-wrap;
   }
-  .seal {
-    max-height: 90px;
-    opacity: 0.92;
-    object-fit: contain;
-  }
-  .seal-disclaimer {
-    font-size: 9px;
-    color: #94a3b8;
-    margin-top: 4px;
-    max-width: 220px;
+  .invoice-description p {
+    margin: 4px 0 0;
+    color: #334155;
   }
   .signatory {
     text-align: center;
@@ -208,6 +207,13 @@ export const INVOICE_HTML_TEMPLATE = `<!DOCTYPE html>
     </div>
   </div>
 
+  {{#if description}}
+  <div class="invoice-description">
+    <strong>Description</strong>
+    <p>{{description}}</p>
+  </div>
+  {{/if}}
+
   <table>
     <thead>
       <tr>
@@ -251,14 +257,6 @@ export const INVOICE_HTML_TEMPLATE = `<!DOCTYPE html>
   </div>
 
   <div class="footer">
-    <div class="seal-container">
-      {{#if sealUrl}}
-      <img class="seal" src="{{sealUrl}}" alt="Seal" />
-      {{/if}}
-      <div class="seal-disclaimer">
-        * This seal is a company visual mark, not a certified digital signature.
-      </div>
-    </div>
     <div class="signatory">
       <div class="line"></div>
       <strong>{{ceoName}}</strong>
@@ -279,7 +277,6 @@ Handlebars.registerHelper('formatRate', function(val) {
 
 export function renderInvoiceHtml(data: {
   logoUrl?: string | null;
-  sealUrl?: string | null;
   companyName: string;
   companyAddress?: string;
   companyNtn?: string;
@@ -288,6 +285,7 @@ export function renderInvoiceHtml(data: {
   issueDate: string;
   category: string;
   clientName: string;
+  description?: string;
   clientLocation?: string;
   projectName: string;
   projectType: string;

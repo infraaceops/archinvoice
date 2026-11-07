@@ -49,7 +49,7 @@ export const PdfViewerScreen: React.FC = () => {
     <View style={styles.container}>
       <Header
         title={`Official Invoice: ${invoice.serial}`}
-        subtitle="PDF View & Export • Watermarked with Company Seal"
+        subtitle="PDF View & Export"
         showBack
         onBack={() => navigateTo('history')}
         rightAction={
@@ -125,6 +125,13 @@ export const PdfViewerScreen: React.FC = () => {
             </View>
           </View>
 
+          {!!invoice.description?.trim() && (
+            <View style={styles.invoiceDescription}>
+              <Text style={styles.descriptionLabel}>DESCRIPTION</Text>
+              <Text style={styles.descriptionText}>{invoice.description}</Text>
+            </View>
+          )}
+
           {/* Line Items */}
           <View style={styles.table}>
             <View style={styles.thead}>
@@ -173,17 +180,8 @@ export const PdfViewerScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Footer with Seal Watermark & CEO Signature */}
+          {/* Footer with CEO signature */}
           <View style={styles.sheetFooter}>
-            <View style={styles.sealContainer}>
-              {tenant.sealUrl && (
-                <Image source={{ uri: tenant.sealUrl }} style={styles.sealImg} />
-              )}
-              <Text style={styles.sealDisclaimer}>
-                * This seal is a company visual mark, not a certified digital signature.
-              </Text>
-            </View>
-
             <View style={styles.signatoryContainer}>
               <View style={styles.signLine} />
               <Text style={styles.ceoName}>{tenant.ceoName}</Text>
@@ -401,22 +399,25 @@ const styles = StyleSheet.create({
     borderTopColor: '#e2e8f0',
     paddingTop: 24,
   },
-  sealContainer: {
-    alignItems: 'center',
-    maxWidth: 220,
+  invoiceDescription: {
+    marginTop: 16,
+    marginBottom: 8,
+    padding: 14,
+    borderRadius: 8,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
   },
-  sealImg: {
-    width: 75,
-    height: 75,
-    objectFit: 'contain',
-    opacity: 0.9,
-    marginBottom: 6,
-  },
-  sealDisclaimer: {
-    fontSize: 8,
+  descriptionLabel: {
+    fontSize: 10,
+    fontWeight: '700',
     color: '#94a3b8',
-    textAlign: 'center',
-    lineHeight: 11,
+    marginBottom: 5,
+  },
+  descriptionText: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#334155',
   },
   signatoryContainer: {
     alignItems: 'center',

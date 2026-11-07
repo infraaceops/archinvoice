@@ -10,6 +10,7 @@
     "build": "tsc",
     "watch": "tsc -w",
     "deploy": "firebase deploy --only functions",
+    "provision:admin": "node scripts/provisionAdmin.js",
     "test": "jest",
     "guard": "node -e \"require('./lib/config/guard').assertPricingSafety()\""
   },

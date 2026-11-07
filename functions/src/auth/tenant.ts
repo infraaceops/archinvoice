@@ -3,14 +3,11 @@ import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 
 const MAX_BRANDING_IMAGE_BYTES = 128 * 1024;
 
-function requireVerifiedEmail(req: CallableRequest<unknown>): { uid: string; email: string } {
+function requireAccountEmail(req: CallableRequest<unknown>): { uid: string; email: string } {
   const uid = req.auth?.uid;
   const email = req.auth?.token.email;
   if (!uid || typeof email !== 'string') {
-    throw new HttpsError('unauthenticated', 'Sign in with Google before continuing.');
-  }
-  if (req.auth?.token.email_verified !== true) {
-    throw new HttpsError('permission-denied', 'Verify your Google account email before continuing.');
+    throw new HttpsError('unauthenticated', 'Sign in before continuing.');
   }
   return { uid, email: email.trim().toLowerCase() };
 }
@@ -53,14 +50,12 @@ function imageFromBase64(value: unknown, mimeType: unknown, fieldName: string): 
 }
 
 export const createTenant = onCall({ region: 'us-central1' }, async (req) => {
-  const { uid, email } = requireVerifiedEmail(req);
-  const { name, ceoName, logoBase64, logoMimeType, sealBase64, sealMimeType, address, ntn } = req.data as {
+  const { uid, email } = requireAccountEmail(req);
+  const { name, ceoName, logoBase64, logoMimeType, address, ntn } = req.data as {
     name: string;
     ceoName: string;
     logoBase64?: string;
     logoMimeType?: string;
-    sealBase64?: string;
-    sealMimeType?: string;
     address?: string;
     ntn?: string;
   };
@@ -79,7 +74,6 @@ export const createTenant = onCall({ region: 'us-central1' }, async (req) => {
   }
 
   const logo = imageFromBase64(logoBase64, logoMimeType, 'Company logo');
-  const seal = imageFromBase64(sealBase64, sealMimeType, 'Company seal');
   const db = getFirestore();
   const userRef = db.doc(`users/${uid}`);
   const tenantRef = db.collection('tenants').doc();
@@ -87,7 +81,6 @@ export const createTenant = onCall({ region: 'us-central1' }, async (req) => {
   const imageDataUrl = (image: ReturnType<typeof imageFromBase64>): string | null =>
     image ? `data:${image.mimeType};base64,${image.bytes.toString('base64')}` : null;
   const logoUrl = imageDataUrl(logo);
-  const sealUrl = imageDataUrl(seal);
 
   const now = new Date();
   const trialEnd = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
@@ -97,7 +90,7 @@ export const createTenant = onCall({ region: 'us-central1' }, async (req) => {
     name: name.trim(),
     ceoName: ceoName.trim(),
     logoUrl,
-    sealUrl,
+    sealUrl: null,
     address: typeof address === 'string' ? address.trim() : '',
     ntn: typeof ntn === 'string' ? ntn.trim() : '',
     currency: 'PKR',
@@ -121,7 +114,7 @@ export const createTenant = onCall({ region: 'us-central1' }, async (req) => {
     settings: {
       invoiceDefaults: {
         prefix: {
-          architecture: 'ARCH',
+          architecture: 'ABS',
           interior: 'INT',
           supervision: 'SUP',
         },
@@ -142,7 +135,7 @@ export const createTenant = onCall({ region: 'us-central1' }, async (req) => {
       if (userSnap.exists && userSnap.data()?.tenantId) {
         throw new HttpsError('already-exists', 'This account already belongs to a company.');
       }
-      transaction.create(tenantRef, { ...tenantData, logoUrl, sealUrl });
+      transaction.create(tenantRef, tenantData);
       transaction.set(
         userRef,
         {
@@ -176,7 +169,7 @@ export const createTenant = onCall({ region: 'us-central1' }, async (req) => {
 });
 
 export const archiveTenant = onCall({ region: 'us-central1', timeoutSeconds: 540 }, async (req) => {
-  const { uid } = requireVerifiedEmail(req);
+  const { uid } = requireAccountEmail(req);
   const { expectedTenantId, confirmationName } = req.data as {
     expectedTenantId?: unknown;
     confirmationName?: unknown;

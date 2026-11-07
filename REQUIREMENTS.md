@@ -107,7 +107,7 @@ interface TenantDoc {          // /tenants/{tenantId}
   name: string;
   ceoName: string;
   logoUrl: string | null;
-  sealUrl: string | null;
+  sealUrl: string | null; // Legacy field; not edited or rendered by the app
   address?: string;
   ntn?: string;
   currency: 'PKR';
@@ -129,7 +129,7 @@ interface TenantDoc {          // /tenants/{tenantId}
   };
   settings: {
     invoiceDefaults: {
-      prefix: Record<Category, string>;   // e.g. ARCH, INT, SUP
+      prefix: Record<Category, string>;   // e.g. ABS, INT, SUP
       startAt: Record<Category, number>;  // default 1
       financialYear: string;              // "2025"
     };
@@ -184,7 +184,8 @@ interface LineItem {
 }
 
 interface InvoiceDoc {         // /tenants/{tenantId}/invoices/{invoiceId}
-  serial: string;              // "ARCH-2025-0001" — set ONLY by Function
+  description?: string;
+  serial: string;              // "ABS-2025-0001" — set ONLY by Function
   category: Category;
   financialYear: string;
   projectId: string;
@@ -205,7 +206,7 @@ interface InvoiceDoc {         // /tenants/{tenantId}/invoices/{invoiceId}
 interface StorageLedgerDoc {   // /tenants/{tenantId}/storage_ledger/{docId}
   deltaBytes: number;
   egressBytes: number;
-  reason: 'pdf_create' | 'pdf_download' | 'logo_upload' | 'seal_upload';
+  reason: 'pdf_create' | 'pdf_download' | 'logo_upload';
   refId: string;
   at: Timestamp;
 }
@@ -449,14 +450,13 @@ service firebase.storage {
 
 ### 7.1 `createTenant` (callable)
 ```typescript
-// Input: { name, ceoName, logoBase64?, sealBase64? }
+// Input: { name, ceoName, logoBase64? }
 // Behavior:
 //   1. Validate auth + user has no tenantId
 //   2. Create /tenants/{newId} with default settings + subscription (trial 14d)
 //   3. Set /users/{uid}.tenantId, role='admin'
 //   4. Add /tenants/{id}/members/{uid} { role:'admin' }
 //   5. If logoBase64: upload to Storage, set logoUrl
-//   6. Same for seal
 //   7. Return { tenantId }
 ```
 
@@ -532,7 +532,7 @@ export const allocateSerialAndCreateInvoice = onCall(async (req) => {
 ```typescript
 // Input: { invoiceId }
 // Behavior:
-//   1. Load invoice + tenant (logo, seal, ceoName)
+//   1. Load invoice + tenant (logo, ceoName)
 //   2. Render HTML from template (see §9)
 //   3. Puppeteer → PDF buffer
 //   4. Upload to Storage: tenants/{t}/invoices/{id}.pdf
@@ -593,9 +593,9 @@ Runs in CI as pre-deploy script — calls `assertPricingSafety()`.
 | # | Screen | Key behaviors |
 |---|---|---|
 | 1 | Splash | Check auth → route |
-| 2 | Google Sign-In | Firebase Auth `GoogleAuthProvider` |
+| 2 | Username Sign-In | Firebase Auth email/password account |
 | 3 | Onboarding Choice | Create Company / Join Company |
-| 4 | Create Company | Name, CEO, upload logo, upload seal (image picker → compress → base64) |
+| 4 | Create Company | Name, CEO, upload logo (image picker → compress → base64) |
 | 5 | Join Company | Enter invite code |
 | 6 | Home / Dashboard | Subscription status, storage usage bar, quick actions |
 | 7 | Project List | Filter active/archived, FAB new |
@@ -636,7 +636,6 @@ Runs in CI as pre-deploy script — calls `assertPricingSafety()`.
   .totals .grand { font-size:18px; font-weight:700; margin-top:8px; }
   .footer { margin-top:80px; display:flex; justify-content:space-between;
             align-items:flex-end; }
-  .seal { max-height:100px; opacity:0.9; }
   .signatory { text-align:center; font-size:12px; }
   .signatory .line { border-top:1px solid #333; width:200px;
                      margin-bottom:6px; padding-top:6px; }
@@ -659,6 +658,9 @@ Runs in CI as pre-deploy script — calls `assertPricingSafety()`.
     <strong>Bill To:</strong> {{clientName}}<br/>
     <strong>Project:</strong> {{projectName}} ({{projectType}})
   </div>
+  {{#if description}}
+  <p>{{description}}</p>
+  {{/if}}
 
   <table>
     <thead>
@@ -688,15 +690,12 @@ Runs in CI as pre-deploy script — calls `assertPricingSafety()`.
       <div class="line"></div>
       {{ceoName}}<br/>Chief Executive Officer
     </div>
-    {{#if sealUrl}}
-    <img class="seal" src="{{sealUrl}}" />
-    {{/if}}
   </div>
 </body>
 </html>
 ```
 
-**Note:** Seal is a **visual watermark only** — add footer microtext: *"This seal is a company visual mark, not a certified digital signature."*
+The generated PDF includes the optional invoice description and does not render a company seal.
 
 ---
 
@@ -787,7 +786,7 @@ Runs in CI as pre-deploy script — calls `assertPricingSafety()`.
 - Client cannot write counters
 
 ### Android instrumentation tests
-- Google Sign-In mock
+- Username/password Firebase Auth
 - Create company flow
 - Create invoice → verify serial format `{PREFIX}-{FY}-{NNNN}`
 - PDF generated and downloadable
@@ -863,10 +862,10 @@ jobs:
 [T-03] Invite architect by code → architect joins on second device
 [T-04] Create project "Villa 12" residential 2000 sqft, rateCard architecture=150 → saved
 [T-05] Create invoice architecture, 2000 qty @ 150 → subtotal 300,000
-[T-06] Issue → serial "ARCH-2025-0001" appears
-[T-07] Create second invoice same category → serial "ARCH-2025-0002"
+[T-06] Issue → serial "ABS-2025-0001" appears
+[T-07] Create second invoice same category → serial "ABS-2025-0002"
 [T-08] Create interior invoice → serial "INT-2025-0001" (independent counter)
-[T-09] Generate PDF → verify logo + seal + CEO name present in PDF
+[T-09] Generate PDF → verify logo + CEO name and optional invoice description; no seal
 [T-10] Download PDF → storage_ledger entry created, egressMonthBytes incremented
 [T-11] Concurrent test: 10 clients create architecture invoices simultaneously → 10 unique consecutive serials, no gaps
 [T-12] Buy storage pack PKR 100 → tenant.storage.purchasedGb +1

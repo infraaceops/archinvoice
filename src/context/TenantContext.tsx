@@ -36,6 +36,7 @@ interface TenantContextType {
     lineItems: LineItem[];
     taxRate?: number;
     clientName: string;
+    description?: string;
   }) => Promise<InvoiceDoc>;
   issueInvoice: (invoiceId: string) => Promise<InvoiceDoc>;
   updateInvoiceStatus: (invoiceId: string, status: InvoiceDoc['status']) => Promise<void>;
@@ -194,6 +195,7 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     lineItems: LineItem[];
     taxRate?: number;
     clientName: string;
+    description?: string;
   }): Promise<InvoiceDoc> => {
     if (!user?.tenantId || user.tenantId !== tenant.id) {
       throw new Error('Join a company before creating an invoice.');

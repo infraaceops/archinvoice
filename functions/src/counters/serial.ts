@@ -8,16 +8,18 @@ export const allocateSerialAndCreateInvoice = onCall(async (req) => {
     throw new HttpsError('unauthenticated', 'User must be signed in.');
   }
 
-  const { tenantId, projectId, category, lineItems, taxRate, clientName } = req.data as {
+  const { tenantId, projectId, category, lineItems, taxRate, clientName, description } = req.data as {
     tenantId: string;
     projectId: string;
     category: Category;
     lineItems: LineItem[];
     taxRate?: number;
     clientName: string;
+    description?: string;
   };
 
-  if (!tenantId || !projectId || !category || !Array.isArray(lineItems) || !clientName) {
+  if (!tenantId || !projectId || !category || !Array.isArray(lineItems) || !clientName ||
+      (description !== undefined && (typeof description !== 'string' || description.length > 2000))) {
     throw new HttpsError('invalid-argument', 'Missing required fields.');
   }
 
@@ -47,7 +49,10 @@ export const allocateSerialAndCreateInvoice = onCall(async (req) => {
   }
 
   const fy = tenant.settings?.invoiceDefaults?.financialYear || new Date().getFullYear().toString();
-  const prefix = tenant.settings?.invoiceDefaults?.prefix?.[category] || category.substring(0, 4).toUpperCase();
+  const configuredPrefix = tenant.settings?.invoiceDefaults?.prefix?.[category];
+  const prefix = category === 'architecture' && configuredPrefix === 'ARCH'
+    ? 'ABS'
+    : configuredPrefix || (category === 'architecture' ? 'ABS' : category.substring(0, 4).toUpperCase());
   const startAt = tenant.settings?.invoiceDefaults?.startAt?.[category] ?? 1;
 
   const counterId = `${category}_${fy}`;
@@ -85,6 +90,7 @@ export const allocateSerialAndCreateInvoice = onCall(async (req) => {
       financialYear: fy,
       projectId,
       clientName,
+      description: typeof description === 'string' ? description.trim() : '',
       lineItems,
       subtotal,
       tax,

@@ -27,7 +27,7 @@ export const Sidebar: React.FC = () => {
         </View>
         <View style={styles.brandTextContainer}>
           <Text style={styles.brandTitle} numberOfLines={1}>
-            {tenant?.name || 'ArchInvoice'}
+            {tenant?.name || 'ABS Invoice'}
           </Text>
           <Text style={styles.brandSubtitle}>Projects & Billing</Text>
         </View>

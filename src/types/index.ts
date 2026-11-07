@@ -7,6 +7,7 @@ export type SubStatus = 'active' | 'grace' | 'locked';
 export interface UserDoc {
   uid: string;
   displayName: string;
+  username?: string;
   email: string;
   photoUrl?: string;
   tenantId: string | null;
@@ -89,6 +90,7 @@ export interface InvoiceDoc {
   financialYear: string;
   projectId: string;
   clientName: string;
+  description?: string;
   lineItems: LineItem[];
   subtotal: number;
   tax: number;

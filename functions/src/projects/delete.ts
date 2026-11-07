@@ -62,9 +62,6 @@ export const deleteProject = onCall(
   async (req) => {
     const uid = req.auth?.uid;
     if (!uid) throw new HttpsError('unauthenticated', 'Sign in before deleting a project.');
-    if (req.auth?.token.email_verified !== true) {
-      throw new HttpsError('permission-denied', 'Verify your Google account email before deleting records.');
-    }
     const { tenantId, projectId } = req.data as {
       tenantId?: unknown;
       projectId?: unknown;
@@ -100,9 +97,6 @@ export const deleteInvoice = onCall(
   async (req) => {
     const uid = req.auth?.uid;
     if (!uid) throw new HttpsError('unauthenticated', 'Sign in before deleting an invoice.');
-    if (req.auth?.token.email_verified !== true) {
-      throw new HttpsError('permission-denied', 'Verify your Google account email before deleting records.');
-    }
     const { tenantId, invoiceId } = req.data as {
       tenantId?: unknown;
       invoiceId?: unknown;

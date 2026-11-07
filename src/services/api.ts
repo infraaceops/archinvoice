@@ -81,8 +81,6 @@ export const api = {
     ntn?: string;
     logoBase64?: string;
     logoMimeType?: string;
-    sealBase64?: string;
-    sealMimeType?: string;
   }): Promise<{ tenantId: string; role: Role }> {
     if (shouldUseRemoteApi()) {
       return requestRemoteApi<{ tenantId: string; role: Role }>('/api/tenants', {
@@ -94,8 +92,6 @@ export const api = {
           ntn: data.ntn,
           logoBase64: data.logoBase64,
           logoMimeType: data.logoMimeType,
-          sealBase64: data.sealBase64,
-          sealMimeType: data.sealMimeType,
         }),
       });
     }
@@ -104,8 +100,8 @@ export const api = {
       throw new Error('Firebase is not configured. Company creation is disabled until a Firebase project is configured.');
     }
     const user = auth?.currentUser;
-    if (!user?.email || !user.emailVerified) {
-      throw new Error('Sign in with a verified Google email before creating a company.');
+    if (!user?.email) {
+      throw new Error('Sign in with your account before creating a company.');
     }
     if (!data.name.trim() || data.name.trim().length > 120 || !data.ceoName.trim() || data.ceoName.trim().length > 120) {
       throw new Error('Company and CEO names are required and must be 120 characters or fewer.');
@@ -120,7 +116,7 @@ export const api = {
       name: data.name.trim(),
       ceoName: data.ceoName.trim(),
       logoUrl: data.logoBase64 && data.logoMimeType ? `data:${data.logoMimeType};base64,${data.logoBase64}` : null,
-      sealUrl: data.sealBase64 && data.sealMimeType ? `data:${data.sealMimeType};base64,${data.sealBase64}` : null,
+      sealUrl: null,
       address: data.address?.trim() || '',
       ntn: data.ntn?.trim() || '',
       currency: 'PKR',
@@ -143,7 +139,7 @@ export const api = {
       },
       settings: {
         invoiceDefaults: {
-          prefix: { architecture: 'ARCH', interior: 'INT', supervision: 'SUP' },
+          prefix: { architecture: 'ABS', interior: 'INT', supervision: 'SUP' },
           startAt: { architecture: 1, interior: 1, supervision: 1 },
           financialYear: String(now.getFullYear()),
         },
@@ -300,6 +296,7 @@ export const api = {
     lineItems: LineItem[];
     taxRate?: number;
     clientName: string;
+    description?: string;
     createdBy: string;
   }): Promise<{ invoiceId: string; serial: string; invoice: InvoiceDoc }> {
     if (isFirebaseConfigured && !shouldUseRemoteApi()) {
@@ -314,6 +311,7 @@ export const api = {
         lineItems: params.lineItems,
         taxRate: params.taxRate,
         clientName: params.clientName,
+        description: params.description?.trim() || '',
       });
       const invoiceSnapshot = await getDoc(
         doc(db, 'tenants', params.tenantId, 'invoices', result.data.invoiceId),
@@ -330,7 +328,10 @@ export const api = {
     // Local atomic counter allocation matching spec §7.3
     const tenant = offlineStorage.loadTenant(params.tenantId);
     const fy = tenant.settings.invoiceDefaults.financialYear || new Date().getFullYear().toString();
-    const prefix = tenant.settings.invoiceDefaults.prefix[params.category] || params.category.substring(0, 4).toUpperCase();
+    const savedPrefix = tenant.settings.invoiceDefaults.prefix[params.category];
+    const prefix = params.category === 'architecture' && savedPrefix === 'ARCH'
+      ? 'ABS'
+      : savedPrefix || (params.category === 'architecture' ? 'ABS' : params.category.substring(0, 4).toUpperCase());
     const startAt = tenant.settings.invoiceDefaults.startAt[params.category] || 1;
 
     // Load existing invoices to find highest sequence for (category, fy)
@@ -358,6 +359,7 @@ export const api = {
       financialYear: fy,
       projectId: params.projectId,
       clientName: params.clientName,
+      description: params.description?.trim() || '',
       lineItems: params.lineItems,
       subtotal,
       tax,

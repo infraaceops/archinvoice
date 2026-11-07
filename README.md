@@ -1,7 +1,7 @@
-# 🏛️ ArchInvoice — Projects & Billing for Architecture Practices
+# 🏛️ ABS Invoice — Projects & Billing for Architecture Practices
 ### One Codebase for Web, Android, and iOS
 
-ArchInvoice helps architecture and interior practices manage projects and generate client invoices from one portable TypeScript app built with React Native and Expo.
+ABS Invoice helps architecture and interior practices manage projects and generate client invoices from one portable TypeScript app built with React Native and Expo. It uses Firebase username/password sign-in, ABS architecture invoice numbering, optional invoice descriptions in PDFs, and no company-seal area in generated invoices.
 
 ---
 
@@ -40,7 +40,7 @@ invoice-generator/
 │   │   ├── config/guard.ts       # Pricing safety deployment assertion
 │   │   ├── counters/serial.ts    # §7.3 Atomic serial & invoice creation
 │   │   ├── invoices/issue.ts     # §7.4 & §7.5 PDF generation & signed URLs
-│   │   ├── pdf/template.ts       # §9 Handlebars HTML PDF template with visual seal
+│   │   ├── pdf/template.ts       # §9 Handlebars HTML PDF template
 │   │   ├── auth/tenant.ts        # Company setup and archival
 │   │   ├── billing/play.ts       # §7.6 & §10 Google Play RTDN & purchase verification
 │   │   ├── metering/cron.ts      # §7.7 & §7.8 Daily metering & grace period enforcer
@@ -58,7 +58,7 @@ invoice-generator/
 │   │   ├── invoices/             # CreateInvoice, InvoicePreview, PdfViewer, InvoiceHistory
 │   │   ├── billing/              # Billing & Storage packs (1GB @ PKR 100, 5GB @ PKR 450)
 │   │   └── settings/             # Settings (Firm profile and invoice prefixes)
-│   ├── services/                 # Universal API, offlineStorage, PDF generator, mockData
+│   ├── services/                 # Universal API, offlineStorage, PDF generator
 │   ├── types/                    # Canonical TypeScript interfaces matching Firestore schema
 │   └── util/                     # PKR currency formatting, dates, tax & area calculations
 ├── App.tsx                       # Universal Root Component
@@ -122,14 +122,13 @@ Output:
 ## 🔑 Key Features Implemented
 
 1. **Atomic Serial Number Allocation (§7.3)**:
-   - Consecutive, gap-free format: `{PREFIX}-{FY}-{0001}` (e.g. `ARCH-2025-0001`, `INT-2025-0001`, `SUP-2025-0001`).
+   - Consecutive format: `{PREFIX}-{FY}-{0001}` (e.g. `ABS-2025-0001`, `INT-2025-0001`, `SUP-2025-0001`).
    - Transactional isolation prevents invoice serial collisions during simultaneous billing.
 
 2. **Universal PDF Engine (§9)**:
    - **Web**: Instant printable preview, HTML5 canvas rendering, direct PDF download.
    - **Android & iOS**: `expo-print` + `expo-sharing` triggers native OS share sheet and PDF generation.
-   - Company branding, CEO signature line, and official visual seal watermark with disclaimer:
-     > *"This seal is a company visual mark, not a certified digital signature."*
+   - Company logo, invoice description, and CEO signatory line. Company seals are not collected or printed.
 
 3. **Company Profile and Billing**:
    - Set up your practice profile, legal signatory, and invoice numbering.
@@ -141,42 +140,57 @@ Output:
    - Storage Packs: 1 GB pack (PKR 100), 5 GB pack (PKR 450 with 10% discount).
    - Egress hard cap: 10 GB/month with auto-throttle protection.
 
-## 🔐 Google Sign-In and Company Setup
+## 🔐 Username/Password Sign-In and Company Setup
 
-The app uses Firebase Authentication with Google as the provider. A signed-in
-Google account without a company profile is directed to company setup. Each
-account creates its own company profile for invoice branding and numbering;
-projects and invoices remain scoped to that company in Firestore. Team
-invitations, join links, and team management have been removed. Existing
-memberships and records are not deleted automatically; existing members may
-retain access until the company is archived.
+The app uses Firebase Authentication for username/password accounts. Passwords
+are managed and hashed by Firebase Authentication; the app and Firestore never
+store plaintext passwords. Changing credentials requires reauthentication with
+the current username and password. Usernames are 3–32 characters and passwords
+must be at least 12 characters.
 
-The company can be archived after typing its exact name. Archiving preserves
-its Firestore records and generated PDFs, revokes active member profiles, and
-blocks further company access; Google accounts remain active.
-Admins can also permanently delete projects (including their invoices and PDFs)
-or individual invoices (including issued invoices and their PDFs). On Firebase,
-these deletions are performed by Firebase Functions rather than direct client
-writes. In optional Cloudflare-auth mode, project and invoice data remains
-device-local, so deletion only affects that device's cache; company archiving is
-not available in that mode.
+An account without a company profile is directed to company setup. Projects and
+invoices remain scoped to the user's company in Firestore. Existing Google-only
+accounts cannot use Google sign-in after this change; create or provision a
+username/password account before disabling Google in Firebase Authentication.
+Team invitations, join links, and team management have been removed.
 
-### Firebase and Google configuration
+### Firebase configuration and initial administrator
 
-1. Create a Firebase project and register a Firebase Web app. Enable **Google**
-   in **Authentication → Sign-in method**, and add each production web domain to
-   **Authentication → Settings → Authorized domains**.
-2. In Google Cloud Console, configure the OAuth consent screen and create the
-   OAuth clients for the Web app, iOS bundle ID `com.archinvoice.app`, and
-   Android package `com.archinvoice.app`. Register the Firebase auth handler
-   domain for the web client. For Android, add the app's signing-certificate
-   SHA fingerprints to the OAuth/Firebase Android app configuration.
-3. Copy `.env.example` to `.env` and fill in the Firebase Web app config values
-   and Google OAuth client IDs. These Expo `EXPO_PUBLIC_` values are included in
-   the client bundle; they are identifiers, not server secrets. Never put
-   service-account keys or other private credentials in `.env` or client code.
-4. Configure the Firebase CLI for the same project with `firebase use --add`.
-   Deploy the Firestore rules and Firebase Functions:
+1. Create a Firebase project and register a Firebase Web app. Enable
+   **Email/Password** in **Authentication → Sign-in method** and configure
+   Firestore. Add production domains to **Authentication → Settings → Authorized
+   domains**.
+2. Copy `.env.example` to `.env` and fill in the Firebase Web app config values.
+   `EXPO_PUBLIC_` values are client identifiers, not server secrets. Never put
+   service-account keys or passwords in `.env` or source code.
+3. Configure Firebase Admin SDK credentials for the same project. Keep the
+   service-account JSON outside the repository and restrict access to it. Set
+   `USERNAME_AUTH_DOMAIN` to the same value as
+   `EXPO_PUBLIC_USERNAME_AUTH_DOMAIN`. The initial account is created once via
+   the Firebase Admin SDK; the password is read only for that process and is
+   not written to the repository:
+
+   ```powershell
+   $env:GOOGLE_APPLICATION_CREDENTIALS = Read-Host "Path to Firebase Admin credential JSON"
+   $env:GCLOUD_PROJECT = Read-Host "Firebase project ID"
+   $env:USERNAME_AUTH_DOMAIN = Read-Host "Username auth domain"
+   $env:ADMIN_USERNAME = 'absadminuser'
+   $secret = Read-Host "Initial administrator password" -AsSecureString
+   $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secret)
+   try {
+     $env:ADMIN_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+     npm --prefix functions run provision:admin
+   } finally {
+     Remove-Item Env:ADMIN_PASSWORD,Env:ADMIN_USERNAME,Env:USERNAME_AUTH_DOMAIN,Env:GCLOUD_PROJECT,Env:GOOGLE_APPLICATION_CREDENTIALS -ErrorAction SilentlyContinue
+     [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
+     Remove-Variable secret,pointer -ErrorAction SilentlyContinue
+   }
+   ```
+
+   The provisioning script refuses to overwrite an existing account. It stores
+   only the Firebase Auth account and user profile; Firebase Authentication
+   handles the password hash.
+4. Deploy the Firestore rules and Firebase Functions:
 
    ```bash
    firebase deploy --only functions,firestore:rules
@@ -185,22 +199,17 @@ not available in that mode.
    Invoice PDF/cloud-storage features require the configured Firebase bucket
    and may have billing costs.
 
-5. Run `npm run build:web` for the web client. For iOS and Android, build and
-   test signed development builds with the configured OAuth client IDs and
-   registered bundle/package identifiers; Expo Go is not a production OAuth
-   test.
+5. Run `npm run build:web` for the web client. Build and test Android/iOS with
+   the configured Firebase app identifiers.
 
 ### Sign-in and company-setup troubleshooting
 
 - `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN` must be a hostname only, such as
   `your-project.firebaseapp.com`. Do not put `https://`, a slash, or an auth
   callback path in this variable.
-- The Google OAuth Web client's **Authorized redirect URI** must be
-  `https://your-project.firebaseapp.com/__/auth/handler` (note `handler`, not
-  `handle`). The Firebase Authentication **Authorized domains** list contains
-  the hostname only, for example `your-project.firebaseapp.com`.
-- Company logos and seals are compressed and stored inline in the company
-  Firestore document (maximum 128 KB per image); this onboarding path does not
+- `USERNAME_AUTH_DOMAIN` and `EXPO_PUBLIC_USERNAME_AUTH_DOMAIN` must match.
+- Company logos are compressed and stored inline in the company Firestore
+  document (maximum 128 KB); this onboarding path does not
   require a Firebase Storage bucket. This consumes Firestore storage/read quota.
 - Issued invoice PDFs still use Cloud Storage through the invoice function. To
   use that feature, configure the default bucket and billing as required by
@@ -208,8 +217,7 @@ not available in that mode.
   PDF storage.
 - Firestore has a no-cost quota on Firebase Spark, but reads/writes and stored
   image data use that quota. Check current Firebase pricing and quotas; free
-  usage is not unlimited. Company logos and seals are kept small to fit safely
-  in the tenant document.
+  usage is not unlimited.
 - Invoice serial allocation/PDF functions elsewhere in this app are still
   separate Cloud Functions and may require a billing-enabled Firebase plan.
   Avoid deploying or using those features if you cannot accept possible
@@ -219,103 +227,11 @@ not available in that mode.
   setup and project/invoice use.
 - After editing `.env`, stop Expo and restart with `npx expo start -c`; a web
   deployment must be rebuilt and redeployed to pick up environment changes.
-- If company setup fails after deploying rules, check the
-  browser console and Firebase Console → **Firestore → Rules** for the latest
-  deployed rules/errors. Check whether a company was created in Firestore
-  before retrying. Do not share `.env` contents, OAuth client secrets,
-  service-account keys, or verification codes when requesting help.
+  Do not share `.env` contents, service-account keys, or passwords when
+  requesting help.
 
-## ☁️ Optional Cloudflare Web API (free-tier deployment)
-
-The web app can use a Cloudflare Worker and D1 for Google sign-in and company
-creation instead of Firebase Auth/Firestore.
-The current Worker implementation supports these identity and company
-operations only. Project, invoice, and document data remain local/offline in
-the current app and are **not** synchronized to D1 or Google Drive. Do not rely
-on local-only records for shared project or billing workflows.
-Paid subscriptions, storage packs, and invoice PDF generation are disabled in
-this Cloudflare path; requests for purchases are rejected rather than simulated.
-Cloudflare free-plan allowances and availability can change; review the current
-Cloudflare limits before relying on them.
-
-The recommended domains are:
-
-- Web app: `https://archinvoice.infraaceops.com`
-- Worker API: `https://api.archinvoice.infraaceops.com`
-
-### Prepare and deploy the Worker
-
-1. In Cloudflare, create a D1 database named `archinvoice` and copy its database
-   ID into `worker/wrangler.jsonc`, replacing
-   `REPLACE_WITH_D1_DATABASE_ID`. The domain must be active in the same
-   Cloudflare account. Sign in to Wrangler from the `worker` folder:
-
-   ```powershell
-   cd worker
-   npm install
-   npx wrangler login
-   ```
-
-2. Set the Google OAuth Web client ID and secret on the Worker, create the D1
-   tables, and deploy:
-
-   ```powershell
-   npx wrangler secret put GOOGLE_CLIENT_ID
-   npx wrangler secret put GOOGLE_CLIENT_SECRET
-   npm run db:migrate:remote
-   npm run deploy
-   ```
-
-   Enter values when Wrangler prompts. The deployment configures the HTTPS
-   custom domain `api.archinvoice.infraaceops.com`. Do not paste the client
-   secret into source files, GitHub Pages settings, or chat. In Google Cloud
-   Console, add this exact authorized redirect URI to the OAuth Web client:
-
-   ```text
-   https://api.archinvoice.infraaceops.com/auth/google/callback
-   ```
-
-   Ensure `infraaceops.com` is listed as an authorized domain on the Google
-   OAuth consent screen.
-
-3. In the root `.env`, use:
-
-   ```text
-   EXPO_PUBLIC_AUTH_PROVIDER=cloudflare
-   EXPO_PUBLIC_API_BASE_URL=https://api.archinvoice.infraaceops.com
-   EXPO_PUBLIC_APP_DOMAIN=archinvoice.infraaceops.com
-   ```
-
-   This Cloudflare login path currently supports the **web app**. Keep
-   `EXPO_PUBLIC_AUTH_PROVIDER=firebase` for the existing native Firebase login
-   until a separate native session flow is implemented.
-4. In the repository's **Settings → Pages**, choose **GitHub Actions** as the
-   source and set `archinvoice.infraaceops.com` as the custom domain. In
-   Cloudflare DNS, add the GitHub Pages CNAME record recommended by GitHub for
-   your repository/account, then enable HTTPS in GitHub Pages. The workflow
-   builds the app with the Cloudflare API URL and publishes `dist` on pushes to
-   `main`. Deploy the Worker and configure its custom domain before enabling
-   this frontend deployment. The app/API must stay on the
-   `infraaceops.com` domain family for the browser's secure session cookie to
-   work reliably; the default `*.github.io` origin is not supported.
-
-The GitHub workflow validates the frontend, Worker, and Firebase Functions
-code, and publishes the web app on pushes to `main`. It does not deploy Firebase
-or Cloudflare services. Deploy Worker changes manually with `cd worker; npm run
-deploy`; this feature removal needs no D1 migration. Deploy Firebase Functions
-and Firestore rules separately when using the Firebase backend.
-
-The Worker validates Google ID-token signatures and OIDC claims, uses OAuth
-state, nonce, and PKCE, and issues a random opaque, HttpOnly, Secure,
-SameSite=Lax session cookie. D1 stores only a hash of the session token.
-Mutating API requests require the exact configured frontend `Origin`.
-Company logos/seals are currently
-limited to small inline images; no R2 uploads are implemented.
-Before using Google sign-in with real users, configure Cloudflare
-rate-limiting/WAF rules for the OAuth start and callback endpoints and monitor
-D1/Worker usage. The Worker
-does not yet implement MFA, audit exports, or project/invoice data
-synchronization.
+The old Cloudflare Google sign-in flow is removed. Use Firebase mode for account
+sign-in and authenticated company data.
 
 ### Production readiness limits
 
@@ -328,10 +244,3 @@ synchronization.
 - Most project and invoice flows retain existing demo/local behavior and
   must be migrated and security-tested before treating the whole product as a
   production project and billing service.
-ut7tyutft9uyoihk/.
-
- mlnk jhfhjn k\]
-  k jvhhmlnk\bnbuu h 
-
-    j j
-     j jkkkgj  []] jj jgyd try i;] jb kjk ]\

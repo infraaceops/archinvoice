@@ -88,7 +88,7 @@ export const InvoiceHistoryScreen: React.FC = () => {
             <Text style={styles.searchIcon}>🔍</Text>
             <TextInput
               style={styles.searchInput}
-              placeholder="Search by serial number (e.g. ARCH-2025-0001) or client..."
+              placeholder="Search by serial number (e.g. ABS-2025-0001) or client..."
               placeholderTextColor="#94a3b8"
               value={search}
               onChangeText={setSearch}

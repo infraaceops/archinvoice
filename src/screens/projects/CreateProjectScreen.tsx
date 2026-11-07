@@ -145,7 +145,7 @@ export const CreateProjectScreen: React.FC = () => {
               label="Client Name *"
               value={clientName}
               onChangeText={setClientName}
-              placeholder="e.g. Tariq Mehmood"
+              placeholder="Client name"
               containerStyle={styles.col}
             />
             <Input

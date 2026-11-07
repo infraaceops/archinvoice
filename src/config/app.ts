@@ -1,8 +1,11 @@
+const authProvider: string = 'firebase';
+
 export const appConfig = {
-  appName: 'ArchInvoice',
+  appName: 'ABS Invoice',
   appDomain: process.env.EXPO_PUBLIC_APP_DOMAIN || 'archinvoice.infraaceops.com',
+  usernameAuthDomain: process.env.EXPO_PUBLIC_USERNAME_AUTH_DOMAIN || 'archinvoice.infraaceops.com',
   apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL || '',
-  authProvider: process.env.EXPO_PUBLIC_AUTH_PROVIDER || 'firebase',
+  authProvider,
   isCloudflareApiEnabled: Boolean(process.env.EXPO_PUBLIC_API_BASE_URL),
 };
 

@@ -63,7 +63,6 @@ export const issueInvoiceAndGeneratePdf = onCall(async (req) => {
   // Render HTML
   const html = renderInvoiceHtml({
     logoUrl: tenant.logoUrl,
-    sealUrl: tenant.sealUrl,
     companyName: tenant.name,
     companyAddress: tenant.address,
     companyNtn: tenant.ntn,
@@ -72,6 +71,7 @@ export const issueInvoiceAndGeneratePdf = onCall(async (req) => {
     issueDate,
     category: invoice.category,
     clientName: invoice.clientName,
+    description: invoice.description,
     clientLocation: project.location,
     projectName: project.name,
     projectType: project.type,

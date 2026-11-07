@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "ArchInvoice",
+    "name": "ABS Invoice",
     "slug": "arch-invoice-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -36,7 +36,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "The app accesses your photos to let you set company logo and digital seal watermark."
+          "photosPermission": "The app accesses your photos to let you set your company logo."
         }
       ]
     ]

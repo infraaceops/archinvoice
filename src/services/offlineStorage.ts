@@ -78,7 +78,7 @@ export function emptyTenant(id = ''): TenantDoc {
     },
     settings: {
       invoiceDefaults: {
-        prefix: { architecture: 'ARCH', interior: 'INT', supervision: 'SUP' },
+        prefix: { architecture: 'ABS', interior: 'INT', supervision: 'SUP' },
         startAt: { architecture: 1, interior: 1, supervision: 1 },
         financialYear: String(new Date().getFullYear()),
       },

@@ -55,11 +55,3 @@ CREATE INDEX IF NOT EXISTS sessions_expiry_idx ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS invites_tenant_idx ON invites(tenant_id, used_at, expires_at);
 CREATE INDEX IF NOT EXISTS memberships_user_idx ON memberships(user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS memberships_single_tenant_idx ON memberships(user_id);
-
-CREATE TABLE IF NOT EXISTS oauth_states (
-  state_hash TEXT PRIMARY KEY,
-  nonce TEXT NOT NULL,
-  code_verifier TEXT NOT NULL,
-  return_to TEXT NOT NULL,
-  expires_at TEXT NOT NULL
-);

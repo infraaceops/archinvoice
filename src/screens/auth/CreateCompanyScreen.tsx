@@ -17,7 +17,7 @@ function companyCreationErrorMessage(error: unknown): string {
     'code' in error &&
     error.code === 'functions/internal'
   ) {
-    return 'Company creation is failing because the app is still pointing at a broken Firebase configuration or the createTenant logic is not deployed. Check EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN and Google OAuth redirect settings, then confirm Firestore is enabled in your Firebase project.';
+    return 'Company creation is failing because Firebase is not configured correctly or the createTenant logic is not deployed. Check the Firebase settings and confirm Firestore is enabled in your Firebase project.';
   }
   return error instanceof Error ? error.message : 'Failed to create company.';
 }
@@ -32,10 +32,9 @@ export const CreateCompanyScreen: React.FC = () => {
   const [address, setAddress] = useState('');
   const [ntn, setNtn] = useState('');
   const [logo, setLogo] = useState<ImagePicker.ImagePickerAsset | null>(null);
-  const [seal, setSeal] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const selectImage = async (target: 'logo' | 'seal') => {
+  const selectLogo = async () => {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
@@ -78,8 +77,7 @@ export const CreateCompanyScreen: React.FC = () => {
         mimeType: 'image/jpeg',
         fileSize: Math.ceil(compressed.base64.length * 0.75),
       };
-      if (target === 'logo') setLogo(brandingImage);
-      else setSeal(brandingImage);
+      setLogo(brandingImage);
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Could not select the company image.', { type: 'error' });
     }
@@ -100,8 +98,6 @@ export const CreateCompanyScreen: React.FC = () => {
         ntn,
         logoBase64: logo?.base64 ?? undefined,
         logoMimeType: logo?.mimeType ?? undefined,
-        sealBase64: seal?.base64 ?? undefined,
-        sealMimeType: seal?.mimeType ?? undefined,
       });
       await refreshUser();
       refreshData();
@@ -124,7 +120,7 @@ export const CreateCompanyScreen: React.FC = () => {
       <View style={styles.card}>
         <Text style={styles.title}>Register Architectural Practice</Text>
         <Text style={styles.subtitle}>
-          Signed in as {user?.email}. Add your company details and optional compact logo and seal.
+          Signed in as {user?.username || user?.email}. Add your company details and optional compact logo.
         </Text>
 
         <Input
@@ -138,7 +134,7 @@ export const CreateCompanyScreen: React.FC = () => {
           label="Chief Executive Officer (CEO) Name *"
           value={ceoName}
           onChangeText={setCeoName}
-          placeholder="e.g. Ar. Shadab Khan"
+          placeholder="Owner or director name"
         />
 
         <Input
@@ -157,7 +153,7 @@ export const CreateCompanyScreen: React.FC = () => {
 
         {/* Branding Previews */}
         <View style={styles.brandingSection}>
-          <Text style={styles.sectionLabel}>Branding & Visual Seal</Text>
+          <Text style={styles.sectionLabel}>Company Branding</Text>
           <View style={styles.brandRow}>
             <View style={styles.brandBox}>
               <Text style={styles.brandBoxLabel}>Company Logo</Text>
@@ -168,29 +164,14 @@ export const CreateCompanyScreen: React.FC = () => {
               )}
               <TouchableOpacity
                 style={styles.changeBtn}
-                onPress={() => void selectImage('logo')}
+                onPress={() => void selectLogo()}
               >
                 <Text style={styles.changeBtnText}>{logo ? 'Change logo' : 'Choose logo'}</Text>
               </TouchableOpacity>
             </View>
-
-            <View style={styles.brandBox}>
-              <Text style={styles.brandBoxLabel}>Visual Seal Mark</Text>
-              {seal ? (
-                <Image source={{ uri: seal.uri }} style={styles.brandImg} />
-              ) : (
-                <Text style={styles.noImgText}>No photo selected</Text>
-              )}
-              <TouchableOpacity
-                style={styles.changeBtn}
-                onPress={() => void selectImage('seal')}
-              >
-                <Text style={styles.changeBtnText}>{seal ? 'Change photo' : 'Choose company photo'}</Text>
-              </TouchableOpacity>
-            </View>
           </View>
           <Text style={styles.disclaimerText}>
-            Images are compressed and saved with your company profile (up to 50 KB each on Cloudflare, or 128 KB with Firebase; no Storage bucket needed). The seal is a visual mark, not a certified digital signature.
+            The company logo is compressed and saved with your profile (up to 50 KB on Cloudflare or 128 KB with Firebase).
           </Text>
         </View>
 

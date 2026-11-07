@@ -4,6 +4,16 @@ import * as Sharing from 'expo-sharing';
 import { InvoiceDoc, ProjectDoc, TenantDoc } from '../types';
 import { formatDate } from '../util/dates';
 
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[character] || character);
+}
+
 export function buildInvoiceHtml(invoice: InvoiceDoc, tenant: TenantDoc, project?: ProjectDoc): string {
   const lineItemsRows = invoice.lineItems
     .map(
@@ -22,6 +32,9 @@ export function buildInvoiceHtml(invoice: InvoiceDoc, tenant: TenantDoc, project
     `
     )
     .join('');
+  const descriptionHtml = invoice.description?.trim()
+    ? `<div class="invoice-description"><strong>Description</strong><p>${escapeHtml(invoice.description.trim())}</p></div>`
+    : '';
 
   return `<!DOCTYPE html>
 <html>
@@ -138,18 +151,18 @@ export function buildInvoiceHtml(invoice: InvoiceDoc, tenant: TenantDoc, project
     border-top: 1px solid #e2e8f0;
     padding-top: 20px;
   }
-  .seal-box {
-    text-align: center;
+  .invoice-description {
+    margin-top: 16px;
+    padding: 12px 16px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #f8fafc;
+    font-size: 12px;
+    white-space: pre-wrap;
   }
-  .seal {
-    max-height: 85px;
-    opacity: 0.92;
-  }
-  .disclaimer {
-    font-size: 9px;
-    color: #94a3b8;
-    margin-top: 4px;
-    max-width: 220px;
+  .invoice-description p {
+    margin: 4px 0 0;
+    color: #334155;
   }
   .signatory {
     text-align: center;
@@ -193,6 +206,8 @@ export function buildInvoiceHtml(invoice: InvoiceDoc, tenant: TenantDoc, project
     </div>
   </div>
 
+  ${descriptionHtml}
+
   <table>
     <thead>
       <tr>
@@ -227,10 +242,6 @@ export function buildInvoiceHtml(invoice: InvoiceDoc, tenant: TenantDoc, project
   </div>
 
   <div class="footer">
-    <div class="seal-box">
-      ${tenant.sealUrl ? `<img class="seal" src="${tenant.sealUrl}" alt="Seal" />` : ''}
-      <div class="disclaimer">* This seal is a company visual mark, not a certified digital signature.</div>
-    </div>
     <div class="signatory">
       <div class="line"></div>
       <strong>${tenant.ceoName}</strong>

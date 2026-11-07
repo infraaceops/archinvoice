@@ -2,10 +2,9 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{db}/documents {
     function signedIn() { return request.auth != null; }
-    function verifiedEmail() {
+    function authenticatedAccount() {
       return signedIn() &&
-        request.auth.token.email is string &&
-        request.auth.token.email_verified == true;
+        request.auth.token.email is string;
     }
     function uid() { return request.auth.uid; }
     function userPath(userId) {
@@ -67,7 +66,7 @@ service cloud.firestore {
       let tenant = request.resource.data;
       let owner = getAfter(userPath(uid())).data;
       let member = getAfter(memberPath(tenantId, uid())).data;
-      return verifiedEmail() &&
+      return authenticatedAccount() &&
         tenant.keys().hasAll([
           'name', 'ceoName', 'logoUrl', 'sealUrl', 'address', 'ntn',
           'currency', 'subscription', 'storage', 'settings', 'createdBy', 'createdAt'
@@ -87,7 +86,7 @@ service cloud.firestore {
         tenant.settings.invoiceDefaults.keys().hasOnly(['prefix', 'startAt', 'financialYear']) &&
         tenant.settings.invoiceDefaults.prefix.keys().hasOnly(['architecture', 'interior', 'supervision']) &&
         tenant.settings.invoiceDefaults.startAt.keys().hasOnly(['architecture', 'interior', 'supervision']) &&
-        tenant.settings.invoiceDefaults.prefix.architecture == 'ARCH' &&
+        tenant.settings.invoiceDefaults.prefix.architecture == 'ABS' &&
         tenant.settings.invoiceDefaults.prefix.interior == 'INT' &&
         tenant.settings.invoiceDefaults.prefix.supervision == 'SUP' &&
         tenant.settings.invoiceDefaults.startAt.architecture == 1 &&
@@ -106,7 +105,7 @@ service cloud.firestore {
       let member = request.resource.data;
       let tenant = getAfter(tenantPath(tenantId)).data;
       let owner = getAfter(userPath(uid())).data;
-      return verifiedEmail() && memberId == uid() &&
+      return authenticatedAccount() && memberId == uid() &&
         member.keys().hasOnly(['uid', 'displayName', 'email', 'phone', 'role', 'invitedBy', 'joinedAt']) &&
         member.uid == uid() && member.role == 'admin' &&
         member.invitedBy == 'self' && member.email == request.auth.token.email.lower() &&
@@ -116,9 +115,9 @@ service cloud.firestore {
     function validMemberProfileCreate(userId) {
       let user = request.resource.data;
       let member = getAfter(memberPath(user.tenantId, userId)).data;
-      return verifiedEmail() && userId == uid() &&
+      return authenticatedAccount() && userId == uid() &&
         user.keys().hasOnly([
-          'uid', 'displayName', 'email', 'photoUrl', 'tenantId', 'role', 'createdAt', 'updatedAt'
+          'uid', 'username', 'displayName', 'email', 'photoUrl', 'tenantId', 'role', 'createdAt', 'updatedAt'
         ]) &&
         user.uid == uid() && user.email == request.auth.token.email.lower() &&
         user.createdAt == request.time &&
@@ -128,10 +127,10 @@ service cloud.firestore {
     }
     function validMemberProfileUpdate(userId) {
       let next = request.resource.data;
-      return verifiedEmail() && userId == uid() && resource.data.tenantId == null &&
+      return authenticatedAccount() && userId == uid() && resource.data.tenantId == null &&
         next.tenantId is string && activeTenant(next.tenantId) &&
         next.keys().hasOnly([
-          'uid', 'displayName', 'email', 'photoUrl', 'tenantId', 'role', 'createdAt', 'updatedAt'
+          'uid', 'username', 'displayName', 'email', 'photoUrl', 'tenantId', 'role', 'createdAt', 'updatedAt'
         ]) &&
         next.uid == uid() && next.email == request.auth.token.email.lower() &&
         next.createdAt == request.time &&

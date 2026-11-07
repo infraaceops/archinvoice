@@ -96,6 +96,13 @@ export const InvoicePreviewScreen: React.FC = () => {
             </View>
           </View>
 
+          {!!invoice.description?.trim() && (
+            <View style={styles.descriptionBlock}>
+              <Text style={styles.blockLabel}>DESCRIPTION</Text>
+              <Text style={styles.descriptionText}>{invoice.description}</Text>
+            </View>
+          )}
+
           {/* Line Items Table */}
           <View style={styles.table}>
             <View style={styles.tableHeader}>
@@ -220,6 +227,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e2e8f0',
     marginBottom: 24,
+  },
+  descriptionBlock: {
+    marginBottom: 20,
+    padding: 14,
+    borderRadius: 8,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  descriptionText: {
+    color: '#334155',
+    fontSize: 13,
+    lineHeight: 19,
   },
   blockLabel: {
     fontSize: 10,

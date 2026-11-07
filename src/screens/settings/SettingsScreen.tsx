@@ -29,7 +29,9 @@ export const SettingsScreen: React.FC = () => {
     tenant.settings?.invoiceDefaults?.financialYear || '2025'
   );
   const [archPrefix, setArchPrefix] = useState(
-    tenant.settings?.invoiceDefaults?.prefix?.architecture || 'ARCH'
+    tenant.settings?.invoiceDefaults?.prefix?.architecture === 'ARCH'
+      ? 'ABS'
+      : tenant.settings?.invoiceDefaults?.prefix?.architecture || 'ABS'
   );
   const [interiorPrefix, setInteriorPrefix] = useState(
     tenant.settings?.invoiceDefaults?.prefix?.interior || 'INT'
@@ -203,7 +205,7 @@ export const SettingsScreen: React.FC = () => {
             <Text style={styles.cardTitle}>Archive Company</Text>
             <Text style={styles.archiveWarning}>
               Archiving blocks company access. Company,
-              project, invoice, and generated PDF records are preserved. Google accounts remain active
+              project, invoice, and generated PDF records are preserved. User accounts remain active
               and can set up a new company. Previously issued PDF links may remain usable
               until their 15-minute expiration. This archive cannot be reversed from the app.
             </Text>

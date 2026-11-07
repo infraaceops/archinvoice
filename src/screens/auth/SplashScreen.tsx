@@ -24,7 +24,7 @@ export const SplashScreen: React.FC = () => {
       <View style={styles.brandBadge}>
         <Text style={styles.brandBadgeText}>AI</Text>
       </View>
-      <Text style={styles.title}>ArchInvoice</Text>
+      <Text style={styles.title}>ABS Invoice</Text>
       <Text style={styles.subtitle}>Projects and billing for architecture practices</Text>
       <ActivityIndicator size="large" color="#3b82f6" style={styles.loader} />
     </View>
