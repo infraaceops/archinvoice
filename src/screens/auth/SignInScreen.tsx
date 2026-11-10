@@ -43,15 +43,15 @@ export const SignInScreen: React.FC = () => {
         <View style={styles.logoHeader}>
           <View style={styles.badge}><Text style={styles.badgeText}>AI</Text></View>
           <Text style={styles.title}>ABS Invoice</Text>
-          <Text style={styles.subtitle}>Sign in with your username and password</Text>
+          <Text style={styles.subtitle}>Sign in with your username or email and password</Text>
         </View>
         <Input
-          label="Username"
+          label="Username or email"
           value={username}
           onChangeText={setUsername}
           autoCapitalize="none"
           autoCorrect={false}
-          textContentType="username"
+          textContentType="emailAddress"
           editable={!loading}
         />
         <Input

@@ -68,6 +68,17 @@ function normalizedUsername(username: string): string {
   return normalized;
 }
 
+function signInEmail(usernameOrEmail: string): string {
+  const identifier = usernameOrEmail.trim().toLowerCase();
+  if (!identifier.includes('@')) {
+    return usernameEmail(normalizedUsername(identifier));
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier)) {
+    throw new Error('Enter a valid email address or username.');
+  }
+  return identifier;
+}
+
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserDoc | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -140,8 +151,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!isFirebaseConfigured || !auth) {
       throw new Error('Firebase is not configured. Add the Firebase client settings to your environment.');
     }
-    const normalized = normalizedUsername(username);
-    await signInWithEmailAndPassword(auth, usernameEmail(normalized), password);
+    await signInWithEmailAndPassword(auth, signInEmail(username), password);
   };
 
   const changeCredentials = async (

@@ -146,7 +146,8 @@ The app uses Firebase Authentication for username/password accounts. Passwords
 are managed and hashed by Firebase Authentication; the app and Firestore never
 store plaintext passwords. Changing credentials requires reauthentication with
 the current username and password. Usernames are 3–32 characters and passwords
-must be at least 12 characters.
+must be at least 12 characters. Sign-in accepts either a username or the full
+email address of a Firebase Authentication account.
 
 An account without a company profile is directed to company setup. Projects and
 invoices remain scoped to the user's company in Firestore. Existing Google-only
