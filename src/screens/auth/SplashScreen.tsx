@@ -12,7 +12,7 @@ export const SplashScreen: React.FC = () => {
       if (user && user.tenantId) {
         navigateTo('dashboard');
       } else if (user && !user.tenantId) {
-        navigateTo('create_company');
+        navigateTo('dashboard');
       } else {
         navigateTo('signin');
       }

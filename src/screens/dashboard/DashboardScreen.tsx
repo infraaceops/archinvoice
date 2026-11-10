@@ -5,6 +5,7 @@ import { Header } from '../../components/Header';
 import { Card } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { StatCard } from '../../components/StatCard';
+import { Button } from '../../components/Button';
 import { formatPKR, formatCompactPKR } from '../../util/currency';
 import { formatDate } from '../../util/dates';
 
@@ -16,6 +17,28 @@ export const DashboardScreen: React.FC = () => {
   const issuedInvoices = invoices.filter((i) => i.status === 'issued' || i.status === 'paid');
   const totalBilledPkr = issuedInvoices.reduce((sum, inv) => sum + inv.total, 0);
   const pendingInvoicesCount = invoices.filter((i) => i.status === 'draft').length;
+
+  if (!tenant.id || !tenant.name) {
+    return (
+      <View style={styles.container}>
+        <Header title="Dashboard" subtitle="Your workspace" />
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <Card>
+            <Text style={styles.cardTitle}>Set up your company when you’re ready</Text>
+            <Text style={styles.cardSubtitle}>
+              Company setup is available in Settings. Create your company profile there to enable projects and invoices.
+            </Text>
+            <Button
+              title="Open Company Settings"
+              onPress={() => navigateTo('settings')}
+              size="md"
+              style={{ alignSelf: 'flex-start', marginTop: 16 }}
+            />
+          </Card>
+        </ScrollView>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

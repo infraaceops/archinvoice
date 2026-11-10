@@ -18,7 +18,7 @@ export const SignInScreen: React.FC = () => {
   const finishSignIn = async () => {
     const account = await refreshUser();
     if (account?.tenantId) navigateTo('dashboard');
-    else navigateTo('create_company');
+    else navigateTo('dashboard');
   };
 
   const handleSignIn = async () => {

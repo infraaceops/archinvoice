@@ -47,7 +47,8 @@ service cloud.firestore {
         tenant.subscription.plan == 'core_monthly' &&
         tenant.subscription.pricePkr == 280 &&
         tenant.subscription.currentPeriodEnd > request.time &&
-        tenant.subscription.currentPeriodEnd <= request.time + duration.value(14, 'd') &&
+        tenant.subscription.currentPeriodEnd <=
+          request.time + duration.value(14, 'd') + duration.value(5, 'm') &&
         tenant.subscription.purchaseToken == 'trial_' + tenantId &&
         tenant.subscription.productId == 'core_monthly' &&
         tenant.storage.keys().hasOnly([

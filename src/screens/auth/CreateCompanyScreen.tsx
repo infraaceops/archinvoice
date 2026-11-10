@@ -118,9 +118,9 @@ export const CreateCompanyScreen: React.FC = () => {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.card}>
-        <Text style={styles.title}>Register Architectural Practice</Text>
+        <Text style={styles.title}>Company Profile Settings</Text>
         <Text style={styles.subtitle}>
-          Signed in as {user?.username || user?.email}. Add your company details and optional compact logo.
+          Signed in as {user?.username || user?.email}. Set up your company profile here; you can return to Settings to update it anytime.
         </Text>
 
         <Input
@@ -176,7 +176,7 @@ export const CreateCompanyScreen: React.FC = () => {
         </View>
 
         <Button
-          title="Create Company & Launch"
+          title="Save Company Profile"
           onPress={handleSubmit}
           loading={loading}
           size="lg"

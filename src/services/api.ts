@@ -111,6 +111,8 @@ export const api = {
     const userRef = doc(db, 'users', user.uid);
     const now = new Date();
     const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const trialEndSafetyMarginMs = 5 * 60 * 1000;
+    const trialEnd = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000 - trialEndSafetyMarginMs);
     const batch = writeBatch(db);
     batch.set(tenantRef, {
       name: data.name.trim(),
@@ -124,7 +126,7 @@ export const api = {
         status: 'active',
         plan: 'core_monthly',
         pricePkr: 280,
-        currentPeriodEnd: Timestamp.fromDate(new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)),
+        currentPeriodEnd: Timestamp.fromDate(trialEnd),
         purchaseToken: `trial_${tenantRef.id}`,
         productId: 'core_monthly',
       },

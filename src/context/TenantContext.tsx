@@ -283,7 +283,7 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setInvoices([]);
     setLoadedTenantId(null);
     await refreshUser();
-    navigateTo('create_company');
+    navigateTo('settings');
     showToast('Company archived. Its records are preserved and member access has been removed.', {
       type: 'success',
     });

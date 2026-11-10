@@ -9,7 +9,6 @@ import { TabBar } from '../components/TabBar';
 // Screens
 import { SplashScreen } from '../screens/auth/SplashScreen';
 import { SignInScreen } from '../screens/auth/SignInScreen';
-import { CreateCompanyScreen } from '../screens/auth/CreateCompanyScreen';
 import { DashboardScreen } from '../screens/dashboard/DashboardScreen';
 import { ProjectListScreen } from '../screens/projects/ProjectListScreen';
 import { CreateProjectScreen } from '../screens/projects/CreateProjectScreen';
@@ -29,15 +28,14 @@ export const AppNavigator: React.FC = () => {
   const clientScreenBlocked = role === 'client' && !clientScreens.includes(activeScreen);
   const isAuthScreen =
     activeScreen === 'splash' ||
-    activeScreen === 'signin' ||
-    activeScreen === 'create_company';
+    activeScreen === 'signin';
 
   useEffect(() => {
     if (loading) return;
     if (!user && !isAuthScreen) navigateTo('signin');
     else if (user?.role === 'client' && clientScreenBlocked) navigateTo('profile');
-    else if (user && !user.tenantId && activeScreen !== 'create_company') {
-      navigateTo('create_company');
+    else if (user && !user.tenantId && !['dashboard', 'settings', 'profile'].includes(activeScreen)) {
+      navigateTo('settings');
     } else if (user?.tenantId && isAuthScreen) navigateTo('dashboard');
   }, [activeScreen, clientScreenBlocked, isAuthScreen, loading, navigateTo, user]);
 
@@ -50,7 +48,7 @@ export const AppNavigator: React.FC = () => {
       case 'signin':
         return <SignInScreen />;
       case 'create_company':
-        return <CreateCompanyScreen />;
+        return <SettingsScreen />;
       case 'dashboard':
         return <DashboardScreen />;
       case 'projects':

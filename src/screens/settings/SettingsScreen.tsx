@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { useTenant } from '../../context/TenantContext';
 import { useAuth } from '../../context/AuthContext';
 import { Header } from '../../components/Header';
@@ -10,6 +12,7 @@ import { Button } from '../../components/Button';
 import { useToast } from '../../context/ToastContext';
 import { appConfig } from '../../config/app';
 import { isFirebaseConfigured } from '../../config/firebase';
+import { CreateCompanyScreen } from '../auth/CreateCompanyScreen';
 
 export const SettingsScreen: React.FC = () => {
   const {
@@ -17,7 +20,7 @@ export const SettingsScreen: React.FC = () => {
     updateTenant,
     archiveTenant,
   } = useTenant();
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const { showToast } = useToast();
   const canArchiveCompany = isFirebaseConfigured && appConfig.authProvider !== 'cloudflare';
 
@@ -25,6 +28,7 @@ export const SettingsScreen: React.FC = () => {
   const [ceoName, setCeoName] = useState(tenant.ceoName);
   const [address, setAddress] = useState(tenant.address || '');
   const [ntn, setNtn] = useState(tenant.ntn || '');
+  const [logoUrl, setLogoUrl] = useState<string | null>(tenant.logoUrl);
   const [financialYear, setFinancialYear] = useState(
     tenant.settings?.invoiceDefaults?.financialYear || '2025'
   );
@@ -44,6 +48,60 @@ export const SettingsScreen: React.FC = () => {
   const [archiveConfirmation, setArchiveConfirmation] = useState('');
   const [archiving, setArchiving] = useState(false);
 
+  useEffect(() => {
+    setName(tenant.name);
+    setCeoName(tenant.ceoName);
+    setAddress(tenant.address || '');
+    setNtn(tenant.ntn || '');
+    setLogoUrl(tenant.logoUrl);
+    setFinancialYear(tenant.settings?.invoiceDefaults?.financialYear || String(new Date().getFullYear()));
+    setArchPrefix(
+      tenant.settings?.invoiceDefaults?.prefix?.architecture === 'ARCH'
+        ? 'ABS'
+        : tenant.settings?.invoiceDefaults?.prefix?.architecture || 'ABS'
+    );
+    setInteriorPrefix(tenant.settings?.invoiceDefaults?.prefix?.interior || 'INT');
+    setSupervisionPrefix(tenant.settings?.invoiceDefaults?.prefix?.supervision || 'SUP');
+  }, [tenant]);
+
+  if (!user?.tenantId) {
+    return <CreateCompanyScreen />;
+  }
+
+  const selectLogo = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        showToast('Allow photo library access to select your company image.', { type: 'error' });
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+      });
+      if (result.canceled) return;
+      const selected = result.assets[0];
+      if (!selected?.width || !selected.height) {
+        showToast('The selected image could not be read. Choose another image.', { type: 'error' });
+        return;
+      }
+      const scale = Math.min(1, 512 / selected.width, 512 / selected.height);
+      const compressed = await ImageManipulator.manipulateAsync(
+        selected.uri,
+        [{ resize: { width: Math.max(1, Math.round(selected.width * scale)) } }],
+        { compress: 0.55, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+      );
+      if (!compressed.base64 || compressed.base64.length > 174_900) {
+        showToast('Choose a smaller image for the company logo.', { type: 'error' });
+        return;
+      }
+      setLogoUrl(`data:image/jpeg;base64,${compressed.base64}`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not select the company image.', { type: 'error' });
+    }
+  };
+
   const handleSaveCompany = async () => {
     if (role !== 'admin') {
       showToast('Permission Denied: Only Admin can update company profile and settings.', {
@@ -58,6 +116,7 @@ export const SettingsScreen: React.FC = () => {
         ceoName,
         address,
         ntn,
+        logoUrl,
         settings: {
           invoiceDefaults: {
             financialYear,
@@ -141,6 +200,27 @@ export const SettingsScreen: React.FC = () => {
               containerStyle={styles.col}
               editable={role === 'admin'}
             />
+          </View>
+
+          <Text style={styles.inputLabel}>Company Logo</Text>
+          <View style={styles.logoRow}>
+            {logoUrl ? (
+              <Image source={{ uri: logoUrl }} style={styles.logoPreview} />
+            ) : (
+              <Text style={styles.cardSubtitle}>No logo selected</Text>
+            )}
+            <TouchableOpacity onPress={() => void selectLogo()} disabled={role !== 'admin'}>
+              <Text style={[styles.logoAction, role !== 'admin' && styles.disabledAction]}>
+                {logoUrl ? 'Change logo' : 'Choose logo'}
+              </Text>
+            </TouchableOpacity>
+            {logoUrl && (
+              <TouchableOpacity onPress={() => setLogoUrl(null)} disabled={role !== 'admin'}>
+                <Text style={[styles.logoAction, styles.removeLogo, role !== 'admin' && styles.disabledAction]}>
+                  Remove
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           <Button
@@ -286,6 +366,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
     marginBottom: 14,
   },
+  inputLabel: { fontSize: 13, fontWeight: '600', color: '#334155', marginBottom: 8 },
+  logoRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  logoPreview: { width: 56, height: 56, borderRadius: 8 },
+  logoAction: { color: '#2563eb', fontSize: 13, fontWeight: '600' },
+  removeLogo: { color: '#b91c1c' },
+  disabledAction: { opacity: 0.5 },
   row: {
     flexDirection: 'row',
     gap: 16,

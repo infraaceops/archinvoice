@@ -149,11 +149,12 @@ the current username and password. Usernames are 3–32 characters and passwords
 must be at least 12 characters. Sign-in accepts either a username or the full
 email address of a Firebase Authentication account.
 
-An account without a company profile is directed to company setup. Projects and
-invoices remain scoped to the user's company in Firestore. Existing Google-only
-accounts cannot use Google sign-in after this change; create or provision a
-username/password account before disabling Google in Firebase Authentication.
-Team invitations, join links, and team management have been removed.
+Company setup is optional during sign-in and is available in Settings. Projects
+and invoices remain scoped to the user's company in Firestore and are available
+after a company profile is created. Existing Google-only accounts cannot use
+Google sign-in after this change; create or provision a username/password
+account before disabling Google in Firebase Authentication. Team invitations,
+join links, and team management have been removed.
 
 ### Firebase configuration and initial administrator
 
