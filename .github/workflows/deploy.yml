@@ -18,6 +18,12 @@ jobs:
   validate:
     name: Validate app and Cloudflare API
     runs-on: ubuntu-latest
+    env:
+      EXPO_PUBLIC_FIREBASE_API_KEY: ${{ vars.EXPO_PUBLIC_FIREBASE_API_KEY }}
+      EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ vars.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+      EXPO_PUBLIC_FIREBASE_PROJECT_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_PROJECT_ID }}
+      EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+      EXPO_PUBLIC_FIREBASE_APP_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_APP_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,9 +32,22 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run guard
+      - name: Verify Firebase client configuration
+        run: |
+          for name in \
+            EXPO_PUBLIC_FIREBASE_API_KEY \
+            EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN \
+            EXPO_PUBLIC_FIREBASE_PROJECT_ID \
+            EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID \
+            EXPO_PUBLIC_FIREBASE_APP_ID
+          do
+            if [ -z "${!name}" ]; then
+              echo "::error::GitHub Actions variable $name is not configured."
+              exit 1
+            fi
+          done
       - run: npm run build:web
         env:
-          EXPO_PUBLIC_AUTH_PROVIDER: cloudflare
           EXPO_PUBLIC_API_BASE_URL: https://api.archinvoice.infraaceops.com
           EXPO_PUBLIC_APP_DOMAIN: archinvoice.infraaceops.com
       - run: npm ci --prefix worker
@@ -44,6 +63,12 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      EXPO_PUBLIC_FIREBASE_API_KEY: ${{ vars.EXPO_PUBLIC_FIREBASE_API_KEY }}
+      EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ vars.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+      EXPO_PUBLIC_FIREBASE_PROJECT_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_PROJECT_ID }}
+      EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+      EXPO_PUBLIC_FIREBASE_APP_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_APP_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -51,9 +76,22 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Verify Firebase client configuration
+        run: |
+          for name in \
+            EXPO_PUBLIC_FIREBASE_API_KEY \
+            EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN \
+            EXPO_PUBLIC_FIREBASE_PROJECT_ID \
+            EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID \
+            EXPO_PUBLIC_FIREBASE_APP_ID
+          do
+            if [ -z "${!name}" ]; then
+              echo "::error::GitHub Actions variable $name is not configured."
+              exit 1
+            fi
+          done
       - run: npm run build:web
         env:
-          EXPO_PUBLIC_AUTH_PROVIDER: cloudflare
           EXPO_PUBLIC_API_BASE_URL: https://api.archinvoice.infraaceops.com
           EXPO_PUBLIC_APP_DOMAIN: archinvoice.infraaceops.com
       - name: Set custom domain
